@@ -319,3 +319,4 @@ XDAS_Int32 trikCvProceedImage(TrikCvHandle* _handle,
   return IVIDTRANSCODE_EOK;
 }
 
+

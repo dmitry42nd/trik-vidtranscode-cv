@@ -11,6 +11,7 @@
 
 #include "internal/stdcpp.hpp"
 #include "trik_vidtranscode_cv.h"
+#include "internal/cv_hsv_range_detector.hpp"
 
 
 /* **** **** **** **** **** */ namespace trik /* **** **** **** **** **** */ {
@@ -21,7 +22,6 @@
 
 #warning Eliminate global var
 static uint64_t s_rgb888hsv[640*480];
-
 
 
 
@@ -112,6 +112,29 @@ class BallDetector<TRIK_VIDTRANSCODE_CV_VIDEO_FORMAT_YUV422, TRIK_VIDTRANSCODE_C
         drawOutputPixelBound(_srcCol-circleY, _srcRow-circleX, widthBot, widthTop, heightBot, heightTop, _outImage, _rgb888);
       }
     }
+
+    void __attribute__((always_inline)) drawRgbTargetCenterLine(const int32_t _srcCol, 
+                                                                const int32_t _srcRow,
+                                                                const TrikCvImageBuffer& _outImage,
+                                                                const uint32_t _rgb888)
+    {
+      const int32_t widthBot  = 0;
+      const int32_t widthTop  = m_inImageDesc.m_width-1;
+      const int32_t heightBot = 0;
+      const int32_t heightTop = m_inImageDesc.m_height-1;
+
+      for (int adj = 0; adj < 100; ++adj)
+      {
+        drawOutputPixelBound(_srcCol-1, _srcRow-adj, widthBot, widthTop, heightBot, heightTop, _outImage, _rgb888);
+        drawOutputPixelBound(_srcCol  , _srcRow-adj, widthBot, widthTop, heightBot, heightTop, _outImage, _rgb888);
+        drawOutputPixelBound(_srcCol+1, _srcRow-adj, widthBot, widthTop, heightBot, heightTop, _outImage, _rgb888);
+
+        drawOutputPixelBound(_srcCol-1, _srcRow+adj, widthBot, widthTop, heightBot, heightTop, _outImage, _rgb888);
+        drawOutputPixelBound(_srcCol  , _srcRow+adj, widthBot, widthTop, heightBot, heightTop, _outImage, _rgb888);
+        drawOutputPixelBound(_srcCol+1, _srcRow+adj, widthBot, widthTop, heightBot, heightTop, _outImage, _rgb888);
+      }
+    }
+
 
     static bool __attribute__((always_inline)) detectHsvPixel(const uint32_t _hsv,
                                                               const uint64_t _hsv_range,
@@ -228,6 +251,36 @@ class BallDetector<TRIK_VIDTRANSCODE_CV_VIDEO_FORMAT_YUV422, TRIK_VIDTRANSCODE_C
       }
     }
 
+void clasterizePixel(const uint32_t _hsv)
+{
+}
+
+void clasterizeImage()
+{
+      const uint64_t* restrict rgb888hsvptr = s_rgb888hsv;
+      const uint32_t width          = m_inImageDesc.m_width;
+      const uint32_t height         = m_inImageDesc.m_height;
+
+      const uint64_t u64_hsv_range  = m_detectRange;
+      const uint32_t u32_hsv_expect = m_detectExpected;
+
+      assert(m_inImageDesc.m_height % 4 == 0); // verified in setup
+#pragma MUST_ITERATE(4, ,4)
+      for (uint32_t srcRow=0; srcRow < height; ++srcRow)
+      {
+
+        assert(m_inImageDesc.m_width % 32 == 0); // verified in setup
+#pragma MUST_ITERATE(32, ,32)
+        for (uint32_t srcCol=0; srcCol < width; ++srcCol)
+        {
+          const uint64_t rgb888hsv = *rgb888hsvptr++;
+          clasterizePixel(rgb888hsv);
+          const bool det = detectHsvPixel(_loll(rgb888hsv), u64_hsv_range, u32_hsv_expect);
+
+        }
+      }
+}
+
     void DEBUG_INLINE proceedImageHsv(TrikCvImageBuffer& _outImage)
     {
       const uint64_t* restrict rgb888hsvptr = s_rgb888hsv;
@@ -343,6 +396,7 @@ class BallDetector<TRIK_VIDTRANSCODE_CV_VIDEO_FORMAT_YUV422, TRIK_VIDTRANSCODE_C
         m_detectExpected = 0x1;
       }
 
+      HsvRangeDetector rangeDetector = HsvRangeDetector();
 
 #ifdef DEBUG_REPEAT
       for (unsigned repeat = 0; repeat < DEBUG_REPEAT; ++repeat) {
@@ -351,12 +405,16 @@ class BallDetector<TRIK_VIDTRANSCODE_CV_VIDEO_FORMAT_YUV422, TRIK_VIDTRANSCODE_C
       if (m_inImageDesc.m_height > 0 && m_inImageDesc.m_width > 0)
       {
         convertImageYuyvToHsv(_inImage);
+        rangeDetector.detect(m_detectRange, m_detectExpected, s_rgb888hsv);
         proceedImageHsv(_outImage);
       }
 
 #ifdef DEBUG_REPEAT
       } // repeat
 #endif
+
+      drawRgbTargetCenterLine(75, 120, _outImage, 0xff00ff);
+      drawRgbTargetCenterLine(100, 120, _outImage, 0xff00ff);
 
       if (m_targetPoints > 0)
       {
@@ -395,3 +453,4 @@ uint16_t* restrict BallDetector<TRIK_VIDTRANSCODE_CV_VIDEO_FORMAT_YUV422,
 
 
 #endif // !TRIK_VIDTRANSCODE_CV_INTERNAL_CV_BALL_DETECTOR_SEQPASS_HPP_
+

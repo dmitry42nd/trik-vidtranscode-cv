@@ -50,8 +50,10 @@ class BallDetector : public CVAlgorithm,
 } /* **** **** **** **** **** * namespace trik * **** **** **** **** **** */
 
 // include one of implementations
+//#include "internal/cv_line_detector_reference.hpp"
+#include "internal/cv_line_detector_seqpass.hpp"
 //#include "internal/cv_ball_detector_reference.hpp"
-#include "internal/cv_ball_detector_seqpass.hpp"
+//#include "internal/cv_ball_detector_seqpass.hpp"
 //#include "internal/cv_ball_detector_singlepass.hpp"
 
 #endif // !TRIK_VIDTRANSCODE_CV_INTERNAL_CV_BALL_DETECTOR_HPP_

@@ -231,6 +231,7 @@ XDAS_Int32 TRIK_VIDTRANSCODE_CV_process(
         xdmOutBuf->accessMask		= 0;
         outImage.m_ptr			= xdmOutBuf->buf;
         outImage.m_size			= xdmOutBuf->bufSize;
+        memset(outImage.m_ptr, 0, outImage.m_size);
     }
     else
     {
