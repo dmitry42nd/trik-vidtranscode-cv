@@ -7,7 +7,7 @@
 #include <xdc/runtime/Log.h>
 
 #include "internal/cv_algorithm.hpp"
-#include "internal/cv_line_detector.hpp"
+#include "internal/cv_ball_detector.hpp"
 
 
 
@@ -77,7 +77,7 @@ XDAS_Int32 handleSetupImageDescCreateCVAlgorithm(const TrikCvHandle* _handle,
   if (_inImageDesc.m_format == _inFormat && _outImageDesc.m_format == _outFormat) \
     return createCVAlgorithm<_CVAlgorithm<_inFormat, _outFormat> >(_handle, _pd, _inImageDesc, _outImageDesc)
 
-  IF_IN_OUT_FORMAT(trik::cv::LineDetector, TRIK_VIDTRANSCODE_CV_VIDEO_FORMAT_YUV422, TRIK_VIDTRANSCODE_CV_VIDEO_FORMAT_RGB565X);
+  IF_IN_OUT_FORMAT(trik::cv::BallDetector, TRIK_VIDTRANSCODE_CV_VIDEO_FORMAT_YUV422, TRIK_VIDTRANSCODE_CV_VIDEO_FORMAT_RGB565X);
 
 #undef IF_IN_OUT_FORMAT
 
@@ -211,11 +211,11 @@ XDAS_Int32 trikCvHandleSetupDynamicParams(TrikCvHandle* _handle,
         XDAS_TRUE,						/* keepInputResolutionFlag[1] - disabled */
       },
       {
-        320,							/* outputHeight[0] = default output 320wx240h */
+        240,							/* outputHeight[0] = default output 320wx240h */
         0,							/* outputHeight[1] - don't care */
       },
       {
-        240,							/* outputWidth[0] = see outputHeight */
+        320,							/* outputWidth[0] = see outputHeight */
         0,							/* outputWidth[1] - don't care */
       },
       {

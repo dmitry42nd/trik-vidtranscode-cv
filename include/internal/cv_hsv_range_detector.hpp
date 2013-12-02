@@ -41,23 +41,17 @@ class HsvRangeDetector
     static const int width = 320;
     static const int height = 240;
     
-    static const int imageScaleCoeff = 4;
-    static const int inImageStartRow = height - height/imageScaleCoeff;
-    static const int inImageOfset    = inImageStartRow*width;
-    static const int outImageOfset   = height/2;
-
-
     //positive image part bounds
     static const int pos_l = 130;
     static const int pos_r = 190;
-    static const int pos_t = inImageStartRow;
-    static const int pos_b = height;
+    static const int pos_t = 90;
+    static const int pos_b = 150;
 
     //negative image part bounds
     static const int neg_l = 90;
     static const int neg_r = 230;
-    static const int neg_t = inImageStartRow;
-    static const int neg_b = height;
+    static const int neg_t = 50;
+    static const int neg_b = 190;
 
     //penalty coeffs
     static const int K0 = 2;
@@ -174,15 +168,21 @@ class HsvRangeDetector
     HsvRangeDetector()
     {}
 
-    void detect(uint8_t& h1, uint8_t& h2, uint8_t& s1, uint8_t& s2, uint8_t& v1, uint8_t& v2, uint64_t* _rgb888hsv) 
+    void detect(uint16_t& _h, uint16_t& _hTol, uint16_t& _s, uint16_t& _sTol, uint16_t& _v, uint16_t& _vTol, uint64_t* _rgb888hsv) 
     {
     //initialize stuff
       srand(time(NULL));
-      const uint64_t* restrict img = _rgb888hsv + inImageOfset;
+      const uint64_t* restrict img = _rgb888hsv;
+      int h1;
+      int h2;
+      int s1;
+      int s2;
+      int v1;
+      int v2;
 
 
     //initialize clasters
-      memset(s_hsv_clasters,0,cstrs_max_num*cstrs_max_num*cstrs_max_num*sizeof(int32_t));
+      memset(s_hsv_clasters, 0, cstrs_max_num*cstrs_max_num*cstrs_max_num*sizeof(int32_t));
 
 
     //initialize variables for claster with highest occurrence
@@ -197,7 +197,7 @@ class HsvRangeDetector
       int s_pos = 0;
       int v_pos = 0;
       
-      for (int row = inImageStartRow; row < height; row++)
+      for (int row = 0; row < height; row++)
       {
         for (int col = 0; col < width; col++)
         {
@@ -221,7 +221,7 @@ class HsvRangeDetector
             }
 
           } //negative part of image
-          else if(neg_r < col || col < neg_l || neg_b < row || row < neg_t)
+          else if(neg_r < col || col < neg_l || neg_b < row || row < neg_t) //wrong condition!!
           {
             s_hsv_clasters[h_pos][s_pos][v_pos]-=K2;
           }
@@ -279,14 +279,32 @@ class HsvRangeDetector
         T*=lambda;
       }
 
-      h1 = (h1 << pos_shift);
-      h2 = (((h2+1) << pos_shift) - 1);
+      h1 = (h1 << pos_shift)*1.4f;
+      h2 = (((h2+1) << pos_shift) - 1)*1.4f;
 
-      s1 = (s1 << pos_shift);
-      s2 = (((s2+1) << pos_shift) - 1);
+      s1 = (s1 << pos_shift)*0.39f;
+      s2 = (((s2+1) << pos_shift) - 1)*0.39f;
 
-      v1 = (v1 << pos_shift);
-      v2 = (((v2+1) << pos_shift) - 1);
+      v1 = (v1 << pos_shift)*0.39f;
+      v2 = (((v2+1) << pos_shift) - 1)*0.39f;
+
+      if (h1 <= h2) 
+      {
+        _h    = (h2 + h1) / 2;
+        _hTol = (h2 - h1) / 2;
+      }
+      else
+      {
+        float hue = (h2 - (360.0f - h1)) / 2;
+        float hueTolerance = (h2 + (360.0f - h1)) / 2;
+        _h = hue >= 0 ? hue : (hue + 360);
+        _hTol = hueTolerance;
+      }
+
+      _s = (s2 + s1) / 2;
+      _sTol = (s2 - s1) / 2;
+      _v = (v1 + v2) / 2;
+      _vTol = (v2 - v1) / 2;
     }
 
 };
