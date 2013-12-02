@@ -1,5 +1,5 @@
-#ifndef TRIK_VIDTRANSCODE_CV_INTERNAL_CV_BALL_DETECTOR_HPP_
-#define TRIK_VIDTRANSCODE_CV_INTERNAL_CV_BALL_DETECTOR_HPP_
+#ifndef TRIK_VIDTRANSCODE_CV_INTERNAL_CV_LINE_DETECTOR_HPP_
+#define TRIK_VIDTRANSCODE_CV_INTERNAL_CV_LINE_DETECTOR_HPP_
 
 #ifndef __cplusplus
 #error C++-only header
@@ -19,7 +19,7 @@
 
 
 template <TrikCvImageFormat _inFormat, TrikCvImageFormat _outFormat>
-class BallDetector : public CVAlgorithm,
+class LineDetector : public CVAlgorithm,
                      private assert_inst<false> // Generic instance, non-functional
 {
   public:
@@ -50,10 +50,7 @@ class BallDetector : public CVAlgorithm,
 } /* **** **** **** **** **** * namespace trik * **** **** **** **** **** */
 
 // include one of implementations
-//#include "internal/cv_line_detector_reference.hpp"
 #include "internal/cv_line_detector_seqpass.hpp"
-//#include "internal/cv_ball_detector_reference.hpp"
-//#include "internal/cv_ball_detector_seqpass.hpp"
-//#include "internal/cv_ball_detector_singlepass.hpp"
+//#include "internal/cv_line_detector_reference.hpp"
 
-#endif // !TRIK_VIDTRANSCODE_CV_INTERNAL_CV_BALL_DETECTOR_HPP_
+#endif // !TRIK_VIDTRANSCODE_CV_INTERNAL_CV_LINE_DETECTOR_HPP_

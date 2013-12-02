@@ -1,5 +1,5 @@
-#ifndef TRIK_VIDTRANSCODE_CV_INTERNAL_CV_BALL_DETECTOR_SEQPASS_HPP_
-#define TRIK_VIDTRANSCODE_CV_INTERNAL_CV_BALL_DETECTOR_SEQPASS_HPP_
+#ifndef TRIK_VIDTRANSCODE_CV_INTERNAL_CV_LINE_DETECTOR_SEQPASS_HPP_
+#define TRIK_VIDTRANSCODE_CV_INTERNAL_CV_LINE_DETECTOR_SEQPASS_HPP_
 
 #ifndef __cplusplus
 #error C++-only header
@@ -10,8 +10,8 @@
 #include <c6x.h>
 
 #include "internal/stdcpp.hpp"
-#include "trik_vidtranscode_cv.h"
 #include "internal/cv_hsv_range_detector.hpp"
+#include "trik_vidtranscode_cv.h"
 
 
 /* **** **** **** **** **** */ namespace trik /* **** **** **** **** **** */ {
@@ -25,8 +25,9 @@ static uint64_t s_rgb888hsv[640*480];
 
 
 
+
 template <>
-class BallDetector<TRIK_VIDTRANSCODE_CV_VIDEO_FORMAT_YUV422, TRIK_VIDTRANSCODE_CV_VIDEO_FORMAT_RGB565X> : public CVAlgorithm
+class LineDetector<TRIK_VIDTRANSCODE_CV_VIDEO_FORMAT_YUV422, TRIK_VIDTRANSCODE_CV_VIDEO_FORMAT_RGB565X> : public CVAlgorithm
 {
   private:
     uint64_t m_detectRange;
@@ -36,6 +37,9 @@ class BallDetector<TRIK_VIDTRANSCODE_CV_VIDEO_FORMAT_YUV422, TRIK_VIDTRANSCODE_C
     int32_t  m_targetX;
     int32_t  m_targetY;
     uint32_t m_targetPoints;
+
+    const int imageScaleCoeff = 4;
+
 
     TrikCvImageDesc m_inImageDesc;
     TrikCvImageDesc m_outImageDesc;
@@ -61,56 +65,11 @@ class BallDetector<TRIK_VIDTRANSCODE_CV_VIDEO_FORMAT_YUV422, TRIK_VIDTRANSCODE_C
       const int32_t srcCol = range<int32_t>(_srcColBot, _srcCol, _srcColTop);
       const int32_t srcRow = range<int32_t>(_srcRowBot, _srcRow, _srcRowTop);
 
-      const int32_t dstRow = srcRow >> m_srcToDstShift;
-      const int32_t dstCol = srcCol >> m_srcToDstShift;
+      const int32_t dstRow = srcRow*1.33f;
+      const int32_t dstCol = srcCol*0.75f;
 
       const uint32_t dstOfs = dstRow*m_outImageDesc.m_lineLength + dstCol*sizeof(uint16_t);
       writeOutputPixel(reinterpret_cast<uint16_t*>(_outImage.m_ptr+dstOfs), _rgb888);
-    }
-
-    void __attribute__((always_inline)) drawOutputCircle(const int32_t _srcCol,
-                                                         const int32_t _srcRow,
-                                                         const int32_t _srcRadius,
-                                                         const TrikCvImageBuffer& _outImage,
-                                                         const uint32_t _rgb888) const
-    {
-      const int32_t widthBot  = 0;
-      const int32_t widthTop  = m_inImageDesc.m_width-1;
-      const int32_t heightBot = 0;
-      const int32_t heightTop = m_inImageDesc.m_height-1;
-
-      int32_t circleError  = 1-_srcRadius;
-      int32_t circleErrorY = 1;
-      int32_t circleErrorX = -2*_srcRadius;
-      int32_t circleX = _srcRadius;
-      int32_t circleY = 0;
-
-      drawOutputPixelBound(_srcCol, _srcRow+_srcRadius, widthBot, widthTop, heightBot, heightTop, _outImage, _rgb888);
-      drawOutputPixelBound(_srcCol, _srcRow-_srcRadius, widthBot, widthTop, heightBot, heightTop, _outImage, _rgb888);
-      drawOutputPixelBound(_srcCol+_srcRadius, _srcRow, widthBot, widthTop, heightBot, heightTop, _outImage, _rgb888);
-      drawOutputPixelBound(_srcCol-_srcRadius, _srcRow, widthBot, widthTop, heightBot, heightTop, _outImage, _rgb888);
-
-      while (circleY < circleX)
-      {
-        if (circleError >= 0)
-        {
-          circleX      -= 1;
-          circleErrorX += 2;
-          circleError  += circleErrorX;
-        }
-        circleY      += 1;
-        circleErrorY += 2;
-        circleError  += circleErrorY;
-
-        drawOutputPixelBound(_srcCol+circleX, _srcRow+circleY, widthBot, widthTop, heightBot, heightTop, _outImage, _rgb888);
-        drawOutputPixelBound(_srcCol+circleX, _srcRow-circleY, widthBot, widthTop, heightBot, heightTop, _outImage, _rgb888);
-        drawOutputPixelBound(_srcCol-circleX, _srcRow+circleY, widthBot, widthTop, heightBot, heightTop, _outImage, _rgb888);
-        drawOutputPixelBound(_srcCol-circleX, _srcRow-circleY, widthBot, widthTop, heightBot, heightTop, _outImage, _rgb888);
-        drawOutputPixelBound(_srcCol+circleY, _srcRow+circleX, widthBot, widthTop, heightBot, heightTop, _outImage, _rgb888);
-        drawOutputPixelBound(_srcCol+circleY, _srcRow-circleX, widthBot, widthTop, heightBot, heightTop, _outImage, _rgb888);
-        drawOutputPixelBound(_srcCol-circleY, _srcRow+circleX, widthBot, widthTop, heightBot, heightTop, _outImage, _rgb888);
-        drawOutputPixelBound(_srcCol-circleY, _srcRow-circleX, widthBot, widthTop, heightBot, heightTop, _outImage, _rgb888);
-      }
     }
 
     void __attribute__((always_inline)) drawRgbTargetCenterLine(const int32_t _srcCol, 
@@ -123,7 +82,7 @@ class BallDetector<TRIK_VIDTRANSCODE_CV_VIDEO_FORMAT_YUV422, TRIK_VIDTRANSCODE_C
       const int32_t heightBot = 0;
       const int32_t heightTop = m_inImageDesc.m_height-1;
 
-      for (int adj = 0; adj < 100; ++adj)
+      for (int adj = 0; adj < 40; ++adj)
       {
         drawOutputPixelBound(_srcCol-1, _srcRow-adj, widthBot, widthTop, heightBot, heightTop, _outImage, _rgb888);
         drawOutputPixelBound(_srcCol  , _srcRow-adj, widthBot, widthTop, heightBot, heightTop, _outImage, _rgb888);
@@ -135,6 +94,23 @@ class BallDetector<TRIK_VIDTRANSCODE_CV_VIDEO_FORMAT_YUV422, TRIK_VIDTRANSCODE_C
       }
     }
 
+    void __attribute__((always_inline)) drawRgbThinLine(const int32_t _srcCol, 
+                                                                const int32_t _srcRow,
+                                                                const TrikCvImageBuffer& _outImage,
+                                                                const uint32_t _rgb888)
+    {
+      const int32_t widthBot  = 0;
+      const int32_t widthTop  = m_inImageDesc.m_width-1;
+      const int32_t heightBot = 0;
+      const int32_t heightTop = m_inImageDesc.m_height-1;
+
+      for (int adj = 0; adj < 40; ++adj)
+      {
+        drawOutputPixelBound(_srcCol  , _srcRow-adj, widthBot, widthTop, heightBot, heightTop, _outImage, _rgb888);
+
+        drawOutputPixelBound(_srcCol  , _srcRow+adj, widthBot, widthTop, heightBot, heightTop, _outImage, _rgb888);
+      }
+    }
 
     static bool __attribute__((always_inline)) detectHsvPixel(const uint32_t _hsv,
                                                               const uint64_t _hsv_range,
@@ -251,63 +227,40 @@ class BallDetector<TRIK_VIDTRANSCODE_CV_VIDEO_FORMAT_YUV422, TRIK_VIDTRANSCODE_C
       }
     }
 
-void clasterizePixel(const uint32_t _hsv)
-{
-}
-
-void clasterizeImage()
-{
-      const uint64_t* restrict rgb888hsvptr = s_rgb888hsv;
-      const uint32_t width          = m_inImageDesc.m_width;
-      const uint32_t height         = m_inImageDesc.m_height;
-
-      const uint64_t u64_hsv_range  = m_detectRange;
-      const uint32_t u32_hsv_expect = m_detectExpected;
-
-      assert(m_inImageDesc.m_height % 4 == 0); // verified in setup
-#pragma MUST_ITERATE(4, ,4)
-      for (uint32_t srcRow=0; srcRow < height; ++srcRow)
-      {
-
-        assert(m_inImageDesc.m_width % 32 == 0); // verified in setup
-#pragma MUST_ITERATE(32, ,32)
-        for (uint32_t srcCol=0; srcCol < width; ++srcCol)
-        {
-          const uint64_t rgb888hsv = *rgb888hsvptr++;
-          clasterizePixel(rgb888hsv);
-          const bool det = detectHsvPixel(_loll(rgb888hsv), u64_hsv_range, u32_hsv_expect);
-
-        }
-      }
-}
-
     void DEBUG_INLINE proceedImageHsv(TrikCvImageBuffer& _outImage)
     {
-      const uint64_t* restrict rgb888hsvptr = s_rgb888hsv;
+      const uint32_t inImageStartRow = m_inImageDesc.m_height - m_inImageDesc.m_height/imageScaleCoeff;
+      const uint32_t inImageOfset    = inImageStartRow*m_inImageDesc.m_width;
+      const uint32_t outImageOfset   = m_inImageDesc.m_height/2;
+
       const uint32_t width          = m_inImageDesc.m_width;
       const uint32_t height         = m_inImageDesc.m_height;
       const uint32_t dstLineLength  = m_outImageDesc.m_lineLength;
       const uint32_t srcToDstShift  = m_srcToDstShift;
       const uint64_t u64_hsv_range  = m_detectRange;
       const uint32_t u32_hsv_expect = m_detectExpected;
+      const uint64_t* restrict rgb888hsvptr = s_rgb888hsv + inImageOfset;
+
       uint32_t targetPointsPerRow;
       uint32_t targetPointsCol;
 
       assert(m_inImageDesc.m_height % 4 == 0); // verified in setup
+
 #pragma MUST_ITERATE(4, ,4)
-      for (uint32_t srcRow=0; srcRow < height; ++srcRow)
+      for (uint32_t srcRow=inImageStartRow; srcRow < height; ++srcRow)
       {
-        const uint32_t dstRow = srcRow >> srcToDstShift;
+        const uint32_t dstRow = static_cast<double>(srcRow - outImageOfset) * 1.33f;
         uint16_t* restrict dstImageRow = reinterpret_cast<uint16_t*>(_outImage.m_ptr + dstRow*dstLineLength);
 
         targetPointsPerRow = 0;
         targetPointsCol = 0;
+
         assert(m_inImageDesc.m_width % 32 == 0); // verified in setup
 #pragma MUST_ITERATE(32, ,32)
         for (uint32_t srcCol=0; srcCol < width; ++srcCol)
         {
-          const uint32_t dstCol    = srcCol >> srcToDstShift;
-          const uint64_t rgb888hsv = *rgb888hsvptr++;
+          const uint32_t dstCol    = static_cast<double>(srcCol) * 0.75f;
+          const uint64_t rgb888hsv = *(rgb888hsvptr)++;
 
           const bool det = detectHsvPixel(_loll(rgb888hsv), u64_hsv_range, u32_hsv_expect);
           targetPointsPerRow += det;
@@ -315,7 +268,6 @@ void clasterizeImage()
           writeOutputPixel(dstImageRow+dstCol, det?0x00ffff:_hill(rgb888hsv));
         }
         m_targetX      += targetPointsCol;
-        m_targetY      += srcRow*targetPointsPerRow;
         m_targetPoints += targetPointsPerRow;
       }
     }
@@ -381,6 +333,7 @@ void clasterizeImage()
       uint32_t detectSatTo   = range<int32_t>(0, (static_cast<int32_t>(_inArgs.detectSatTo  ) * 255) / 100, 255); // scaling 0..100 to 0..255
       uint32_t detectValFrom = range<int32_t>(0, (static_cast<int32_t>(_inArgs.detectValFrom) * 255) / 100, 255); // scaling 0..100 to 0..255
       uint32_t detectValTo   = range<int32_t>(0, (static_cast<int32_t>(_inArgs.detectValTo  ) * 255) / 100, 255); // scaling 0..100 to 0..255
+      bool     autoDetectHsv = static_cast<bool>(_inArgs.autoDetectHsv); // true or false
 
       if (detectHueFrom <= detectHueTo)
       {
@@ -396,7 +349,6 @@ void clasterizeImage()
         m_detectExpected = 0x1;
       }
 
-      HsvRangeDetector rangeDetector = HsvRangeDetector();
 
 #ifdef DEBUG_REPEAT
       for (unsigned repeat = 0; repeat < DEBUG_REPEAT; ++repeat) {
@@ -405,7 +357,16 @@ void clasterizeImage()
       if (m_inImageDesc.m_height > 0 && m_inImageDesc.m_width > 0)
       {
         convertImageYuyvToHsv(_inImage);
-        rangeDetector.detect(m_detectRange, m_detectExpected, s_rgb888hsv);
+
+        if (autoDetectHsv)
+        {
+          HsvRangeDetector rangeDetector = HsvRangeDetector();
+          rangeDetector.detect(_outArgs.detectHueFrom, _outArgs.detectHueTo,
+                               _outArgs.detectSatFrom, _outArgs.detectSatTo,
+                               _outArgs.detectValFrom, _outArgs.detectValTo,
+                               s_rgb888hsv);
+        }
+
         proceedImageHsv(_outImage);
       }
 
@@ -413,22 +374,26 @@ void clasterizeImage()
       } // repeat
 #endif
 
-      drawRgbTargetCenterLine(75, 120, _outImage, 0xff00ff);
-      drawRgbTargetCenterLine(100, 120, _outImage, 0xff00ff);
+      const uint32_t inImageStartRow = m_inImageDesc.m_height - m_inImageDesc.m_height/imageScaleCoeff;
+      XDAS_Int32 drawY   = (inImageStartRow - m_inImageDesc.m_height/2 + m_inImageDesc.m_height/(2*imageScaleCoeff));
+      drawRgbThinLine(130, drawY, _outImage, 0xff00ff);
+      drawRgbThinLine(190, drawY, _outImage, 0xff00ff);
+      drawRgbThinLine( 90, drawY, _outImage, 0xff00ff);
+      drawRgbThinLine(230, drawY, _outImage, 0xff00ff);
 
       if (m_targetPoints > 0)
       {
         const int32_t targetX = m_targetX/m_targetPoints;
         const int32_t targetY = m_targetY/m_targetPoints;
+        const int32_t inImagePixels = m_inImageDesc.m_height * m_inImageDesc.m_width;
 
         assert(m_inImageDesc.m_height > 0 && m_inImageDesc.m_width > 0); // more or less safe since no target points would be detected otherwise
-        const uint32_t targetRadius = std::ceil(std::sqrt(static_cast<float>(m_targetPoints) / 3.1415927f));
 
-        drawOutputCircle(targetX, targetY, targetRadius, _outImage, 0xffff00);
-
+        drawRgbTargetCenterLine(targetX, drawY, _outImage, 0xff00ff);
+ 
         _outArgs.targetX = ((targetX - static_cast<int32_t>(m_inImageDesc.m_width) /2) * 100*2) / static_cast<int32_t>(m_inImageDesc.m_width);
         _outArgs.targetY = ((targetY - static_cast<int32_t>(m_inImageDesc.m_height)/2) * 100*2) / static_cast<int32_t>(m_inImageDesc.m_height);
-        _outArgs.targetSize = static_cast<uint32_t>(targetRadius*100*4) / static_cast<uint32_t>(m_inImageDesc.m_width + m_inImageDesc.m_height);
+        _outArgs.targetSize = static_cast<XDAS_UInt32>(m_targetPoints*100*imageScaleCoeff)/inImagePixels;
       }
       else
       {
@@ -441,9 +406,9 @@ void clasterizeImage()
     }
 };
 
-uint16_t* restrict BallDetector<TRIK_VIDTRANSCODE_CV_VIDEO_FORMAT_YUV422,
+uint16_t* restrict LineDetector<TRIK_VIDTRANSCODE_CV_VIDEO_FORMAT_YUV422,
                                 TRIK_VIDTRANSCODE_CV_VIDEO_FORMAT_RGB565X>::s_mult43_div = NULL;
-uint16_t* restrict BallDetector<TRIK_VIDTRANSCODE_CV_VIDEO_FORMAT_YUV422,
+uint16_t* restrict LineDetector<TRIK_VIDTRANSCODE_CV_VIDEO_FORMAT_YUV422,
                                 TRIK_VIDTRANSCODE_CV_VIDEO_FORMAT_RGB565X>::s_mult255_div = NULL;
 
 
@@ -452,5 +417,4 @@ uint16_t* restrict BallDetector<TRIK_VIDTRANSCODE_CV_VIDEO_FORMAT_YUV422,
 } /* **** **** **** **** **** * namespace trik * **** **** **** **** **** */
 
 
-#endif // !TRIK_VIDTRANSCODE_CV_INTERNAL_CV_BALL_DETECTOR_SEQPASS_HPP_
-
+#endif // !TRIK_VIDTRANSCODE_CV_INTERNAL_CV_LINE_DETECTOR_SEQPASS_HPP_
