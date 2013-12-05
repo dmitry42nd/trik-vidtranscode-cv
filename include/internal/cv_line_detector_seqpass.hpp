@@ -361,9 +361,9 @@ class LineDetector<TRIK_VIDTRANSCODE_CV_VIDEO_FORMAT_YUV422, TRIK_VIDTRANSCODE_C
         if (autoDetectHsv)
         {
           HsvRangeDetector rangeDetector = HsvRangeDetector();
-          rangeDetector.detect(_outArgs.detectHueFrom, _outArgs.detectHueTo,
-                               _outArgs.detectSatFrom, _outArgs.detectSatTo,
-                               _outArgs.detectValFrom, _outArgs.detectValTo,
+          rangeDetector.detect(_outArgs.detectHue, _outArgs.detectHueTolerance,
+                               _outArgs.detectSat, _outArgs.detectSatTolerance,
+                               _outArgs.detectVal, _outArgs.detectValTolerance,
                                s_rgb888hsv);
         }
 
