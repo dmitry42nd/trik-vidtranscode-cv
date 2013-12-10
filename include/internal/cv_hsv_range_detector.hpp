@@ -41,7 +41,7 @@ class HsvRangeDetector
     static const int width = 320;
     static const int height = 240;
     
-    static const int imageScaleCoeff = 4;
+    static const int imageScaleCoeff = 2;
     static const int inImageStartRow = height - height/imageScaleCoeff;
     static const int inImageOfset    = inImageStartRow*width;
     static const int outImageOfset   = height/2;
@@ -60,9 +60,9 @@ class HsvRangeDetector
     static const int neg_b = height;
 
     //penalty coeffs
-    static const int K0 = 2;
+    static const int K0 = 8;
     static const int K1 = 1; 
-    static const int K2 = 2; 
+    static const int K2 = 8; 
 
     const double T_end = 0.0005;
 
@@ -129,8 +129,6 @@ class HsvRangeDetector
 
                         val = s_hsv_clasters[h_pos][s_pos][v_pos];
                         res += val != 0 ? val : -K0;
-
-                        //res += s_hsv_clasters[h_pos][s_pos][v_pos];
                     }
                 }
             }
@@ -144,11 +142,8 @@ class HsvRangeDetector
                 {
                     for(int v_pos = v1; v_pos <= v2; v_pos++)
                     {
-
                         val = s_hsv_clasters[h_pos][s_pos][v_pos];
                         res += val != 0 ? val : -K0;
-
-                        //res += s_hsv_clasters[h_pos][s_pos][v_pos];
                     }
                 }
             }
@@ -158,10 +153,8 @@ class HsvRangeDetector
                 {
                     for(int v_pos = v1; v_pos <= v2; v_pos++)
                     {
-
                         val = s_hsv_clasters[h_pos][s_pos][v_pos];
                         res += val != 0 ? val : -K0;
-
                     }
                 }
             }
@@ -189,7 +182,6 @@ class HsvRangeDetector
 
     //initialize clasters
       memset(s_hsv_clasters,0,cstrs_max_num*cstrs_max_num*cstrs_max_num*sizeof(int32_t));
-
 
     //initialize variables for claster with highest occurrence
       int h_max_pos = 0;
@@ -254,7 +246,6 @@ class HsvRangeDetector
       int s1New;
       int s2New;
       int v2New;
-
 
       while(/*Th > T_end || Ts > T_end || Tv > T_end*/ T > T_end)
       {
