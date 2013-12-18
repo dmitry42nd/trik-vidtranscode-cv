@@ -38,7 +38,7 @@ class LineDetector<TRIK_VIDTRANSCODE_CV_VIDEO_FORMAT_YUV422, TRIK_VIDTRANSCODE_C
 
     const int m_imageScaleCoeff = 2;
 
-    const int m_lvlsNum = 3;
+    const int m_lvlsNum = 6;
 
     int      m_lvlHeight;
     uint32_t m_inImageFirstRow;
@@ -434,6 +434,7 @@ class LineDetector<TRIK_VIDTRANSCODE_CV_VIDEO_FORMAT_YUV422, TRIK_VIDTRANSCODE_C
       drawRgbThinLine( 90, drawY, _outImage, 0xff00ff);
       drawRgbThinLine(230, drawY, _outImage, 0xff00ff);
 
+
       if (m_targetXs) // if (sum(m_targetXs) > 0)
       {
         const int32_t inImagePixels = m_inImageDesc.m_height * m_inImageDesc.m_width;
@@ -455,6 +456,14 @@ class LineDetector<TRIK_VIDTRANSCODE_CV_VIDEO_FORMAT_YUV422, TRIK_VIDTRANSCODE_C
         _outArgs.targetSize = 0;
       }
 
+/*
+      assert(m_inImageDesc.m_height > 0 && m_inImageDesc.m_width > 0); // more or less safe since no target points would be detected otherwise
+
+      for (int l = 0; l < m_lvlsNum; l++)
+      { 
+        
+      }
+*/
       return true;
     }
 };
