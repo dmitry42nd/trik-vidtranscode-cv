@@ -11,7 +11,8 @@
 
 #include "internal/stdcpp.hpp"
 #include "internal/cv_hsv_range_detector.hpp"
-#include "internal/cv_cubic_spline.hpp"
+//#include "internal/cv_cubic_spline.hpp"
+#include "internal/cv_mls_approximator.hpp"
 #include "trik_vidtranscode_cv.h"
 
 
@@ -303,23 +304,23 @@ class LineDetector<TRIK_VIDTRANSCODE_CV_VIDEO_FORMAT_YUV422, TRIK_VIDTRANSCODE_C
       }
     }
 
-    void __attribute__((always_inline)) drawRgbFuncLine(int32_t _srcRow, CubicSpline* _cubSpline, const TrikCvImageBuffer& _outImage, const uint32_t _rgb888)
+    void __attribute__((always_inline)) drawRgbFuncLine(int32_t _srcRow, MlsApproximator* _mlsApproximator, const TrikCvImageBuffer& _outImage, const uint32_t _rgb888)
     {
       const int32_t widthBot  = 0;
       const int32_t widthTop  = m_inImageDesc.m_width-1;
       const int32_t heightBot = 0;
       const int32_t heightTop = m_inImageDesc.m_height-1;
-
+      int tgtY = 0;
       for (int adj = 0; adj < m_inImageDesc.m_height/m_imageScaleCoeff; ++adj)
       {
-        drawOutputPixelBound(_cubSpline->f(_srcRow+adj)-2, _srcRow+adj, widthBot, widthTop, heightBot, heightTop, _outImage, _rgb888);
-        drawOutputPixelBound(_cubSpline->f(_srcRow+adj)-1, _srcRow+adj, widthBot, widthTop, heightBot, heightTop, _outImage, _rgb888);
-        drawOutputPixelBound(_cubSpline->f(_srcRow+adj), _srcRow+adj, widthBot, widthTop, heightBot, heightTop, _outImage, _rgb888);
-        drawOutputPixelBound(_cubSpline->f(_srcRow+adj)+1, _srcRow+adj, widthBot, widthTop, heightBot, heightTop, _outImage, _rgb888);
-        drawOutputPixelBound(_cubSpline->f(_srcRow+adj)+2, _srcRow+adj, widthBot, widthTop, heightBot, heightTop, _outImage, _rgb888);
+        tgtY = _mlsApproximator->foo(_srcRow+adj);
+        drawOutputPixelBound(tgtY-2, _srcRow+adj, widthBot, widthTop, heightBot, heightTop, _outImage, _rgb888);
+        drawOutputPixelBound(tgtY-1, _srcRow+adj, widthBot, widthTop, heightBot, heightTop, _outImage, _rgb888);
+        drawOutputPixelBound(tgtY, _srcRow+adj, widthBot, widthTop, heightBot, heightTop, _outImage, _rgb888);
+        drawOutputPixelBound(tgtY+1, _srcRow+adj, widthBot, widthTop, heightBot, heightTop, _outImage, _rgb888);
+        drawOutputPixelBound(tgtY+2, _srcRow+adj, widthBot, widthTop, heightBot, heightTop, _outImage, _rgb888);
       }
     }
-
 
   public:
     virtual bool setup(const TrikCvImageDesc& _inImageDesc,
@@ -443,9 +444,14 @@ class LineDetector<TRIK_VIDTRANSCODE_CV_VIDEO_FORMAT_YUV422, TRIK_VIDTRANSCODE_C
 
         //not draw but compute
         drawRgbTargetCenterLines(drawY, _outImage, 0xff0000);
+/*
         CubicSpline cubSpline = CubicSpline();
         cubSpline.buildSpline(m_targetYs, m_targetXs, m_lvlsNum);
         drawRgbFuncLine(drawY, &cubSpline,  _outImage, 0xff0000);
+*/
+        MlsApproximator mlsApproximator = MlsApproximator(m_targetYs, m_targetXs, m_lvlsNum, 2);
+        mlsApproximator.approximate();
+        drawRgbFuncLine(drawY, &mlsApproximator, _outImage, 0xff0000);
 
         _outArgs.targetX = ((m_targetXs[0] - static_cast<int32_t>(m_inImageDesc.m_width) /2) * 100*2) / static_cast<int32_t>(m_inImageDesc.m_width);
         _outArgs.targetSize = static_cast<XDAS_UInt32>(m_targetPoints*100*m_imageScaleCoeff)/inImagePixels;
