@@ -290,17 +290,14 @@ class LineDetector<TRIK_VIDTRANSCODE_CV_VIDEO_FORMAT_YUV422, TRIK_VIDTRANSCODE_C
 
     }
 
-    void __attribute__((always_inline)) drawRgbTargetCenterLines(int32_t _srcRow,
+    void __attribute__((always_inline)) drawRgbTargetCenterLines(int _lvlsNum,
                                                                  const TrikCvImageBuffer& _outImage,
                                                                  const uint32_t _rgb888)
     {
-#pragma MUST_ITERATE(m_lvlsNum, , m_lvlsNum)
-      for(int lvlId = 0; lvlId < m_lvlsNum; lvlId++)
+//#pragma MUST_ITERATE(m_lvlsNum, , m_lvlsNum)
+      for(int lvlId = 0; lvlId < _lvlsNum; lvlId++)
       {
-        m_targetXs[lvlId] = m_targetXs[lvlId]/m_targetPointss[lvlId];
-        m_targetYs[lvlId] = _srcRow+m_lvlHeight/2;
-        drawRgbTargetCenterLine(m_targetXs[lvlId], _srcRow, _outImage, 0xff0000);
-        _srcRow += m_lvlHeight;
+        drawRgbTargetCenterLine(m_targetXs[lvlId], m_targetYs[lvlId], _outImage, 0xff0000);
       }
     }
 
@@ -436,20 +433,33 @@ class LineDetector<TRIK_VIDTRANSCODE_CV_VIDEO_FORMAT_YUV422, TRIK_VIDTRANSCODE_C
       drawRgbThinLine(230, drawY, _outImage, 0xff00ff);
 
 
-      if (m_targetXs) // if (sum(m_targetXs) > 0)
+      int notEmptyLvlsNum = 0;
+      int tmpY = drawY;
+      int32_t targetPointsSum = 0;
+
+      for(int lvlId = 0; lvlId < m_lvlsNum; lvlId++)
+      {
+        if(m_targetPointss[lvlId] > 0)
+        {
+          targetPointsSum += m_targetPointss[lvlId];
+          m_targetXs[notEmptyLvlsNum] = m_targetXs[lvlId]/m_targetPointss[lvlId];
+          m_targetYs[notEmptyLvlsNum] = tmpY;// + m_lvlHeight/2;
+          notEmptyLvlsNum++;
+        }
+        tmpY += m_lvlHeight;
+      }
+
+      if (targetPointsSum > 0)
       {
         const int32_t inImagePixels = m_inImageDesc.m_height * m_inImageDesc.m_width;
 
         assert(m_inImageDesc.m_height > 0 && m_inImageDesc.m_width > 0); // more or less safe since no target points would be detected otherwise
 
         //not draw but compute
-        drawRgbTargetCenterLines(drawY, _outImage, 0xff0000);
-/*
-        CubicSpline cubSpline = CubicSpline();
-        cubSpline.buildSpline(m_targetYs, m_targetXs, m_lvlsNum);
-        drawRgbFuncLine(drawY, &cubSpline,  _outImage, 0xff0000);
-*/
-        MlsApproximator mlsApproximator = MlsApproximator(m_targetYs, m_targetXs, m_lvlsNum, 2);
+        drawRgbTargetCenterLines(notEmptyLvlsNum, _outImage, 0xff0000);
+
+        //if notEmptyLvlsNum > 2
+        MlsApproximator mlsApproximator = MlsApproximator(m_targetYs, m_targetXs, notEmptyLvlsNum, 2);
         mlsApproximator.approximate();
         drawRgbFuncLine(drawY, &mlsApproximator, _outImage, 0xff0000);
 
