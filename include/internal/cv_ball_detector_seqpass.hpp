@@ -19,10 +19,28 @@
 /* **** **** **** **** **** */ namespace cv /* **** **** **** **** **** */ {
 
 
-
 #warning Eliminate global var
 static uint64_t s_rgb888hsv[640*480];
 
+const int m = 256 / 4;    // partition of axis h in 32 parts
+const int n = 256 / 64;   // s in 4 parts
+const int k = 256 / 64;   // v in 4 parts
+
+static int c_color[m][n][k]; // massiv of clusters 32x8x8
+
+union U_Hsv8x3
+{
+    struct {
+      uint8_t h;
+      uint8_t s;
+      uint8_t v;
+      uint8_t none; //unused
+    } parts;
+    uint32_t whole;
+};
+
+int img_width  = 320;
+int img_height = 240;
 
 
 template <>
@@ -332,6 +350,208 @@ void clasterizeImage()
       }
     }
 
+    void __attribute__((always_inline)) fillImage(const TrikCvImageBuffer& _outImage, const uint32_t _rgb888)
+    {
+      const int32_t widthBot  = 0;
+      const int32_t widthTop  = m_inImageDesc.m_width-1;
+      const int32_t heightBot = 0;
+      const int32_t heightTop = m_inImageDesc.m_height-1;
+
+      for (int row = 0; row < 50; ++row)
+      {
+        for (int col = 0; col < 50; ++col)
+        {
+          drawOutputPixelBound(col, row, widthBot, widthTop, heightBot, heightTop, _outImage, _rgb888);
+        }
+      }
+
+    }
+
+  uint32_t GetImgColor()
+  {
+      uint32_t rgb_result = 0;
+      const uint64_t* restrict img = s_rgb888hsv;
+
+      // values of hue, saturation and value are between 0 and 255
+
+      // hsv cube 256x256x256 -> many small clusters 32x8x8
+      int ch, cs, cv;
+
+      int row_start_position = 90;
+      int row_finish_position = 150;
+      int column_start_position = 130;
+      int column_finish_position = 190;
+
+      //fill out the massiv of clusters
+      U_Hsv8x3 pixel;
+      for(int row = row_start_position; row < row_finish_position; row++)
+          for(int column = column_start_position; column < column_finish_position; column++)
+          {
+            pixel.whole = _loll(img[row*img_width + column]);
+
+            if(pixel.parts.h == 0) ch = 0;
+            else ch = pixel.parts.h / 4;
+
+            if(pixel.parts.s == 0) cs = 0;
+            else cs = pixel.parts.s / 64;
+
+            if(pixel.parts.v == 0) cv = 0;
+            else cv = pixel.parts.v / 64;
+
+            c_color[ch][cs][cv]++;
+          }
+
+      int ch_max = 0, cs_max = 0, cv_max = 0;
+      int max_number_of_pix = 0;
+
+      int i, j, l;
+
+      // find cluster with max number of pixels
+      for(i = 0; i < m; i++)
+          for(j = 0; j < n; j++)
+              for(l = 0; l < k; l++)
+              {
+                  if(c_color[i][j][l] > max_number_of_pix)
+                  {
+                      max_number_of_pix = c_color[i][j][l];
+                      ch_max = i;
+                      cs_max = j;
+                      cv_max = l;
+                  }
+              }
+
+      // return h, s and v as h_max, s_max and _max with values
+      // scaled to be between 0 and 255.
+      int hue = ch_max * 4;
+      int sat = cs_max * 64;
+      int val = cv_max * 64;
+
+      rgb_result = HSVtoRGB(hue, sat, val);
+
+      return rgb_result;
+/*
+      *_color      = rgb_result;
+      *_colorEntry = max_number_of_pix;
+
+      int hue2 = ch_max2 * 4;
+      int sat2 = cs_max2 * 64;
+      int val2 = cv_max2 * 64;
+      int rgb_result2 = HSVtoRGB(hue2, sat2, val2);
+
+      *_color2      = rgb_result2;
+      *_colorEntry2 = max_number_of_pix2;
+*/
+  }
+
+  uint32_t HSVtoRGB(int H, int S, int V)
+  {
+      // HSV contains values scaled as in the color wheel:
+      // that is, all from 0 to 255.
+
+      // for this code to work, Hue needs
+      // to be scaled from 0 to 360 (it is the angle of the selected
+      // point within the circle). Saturation and Value must be
+      // scaled to be between 0 and 1.
+
+      uint32_t rgb_result;
+
+      double h;
+      double s;
+      double v;
+
+      double r = 0;
+      double g = 0;
+      double b = 0;
+
+      // Scale Hue to be between 0 and 360. Saturation
+      // and value scale to be between 0 and 1.
+      h = (double)((int)((double) H / 255.0f * 360.0f) % 360);
+      s = S > 5 ? 1 : 0;//(double) S / 255.0f;
+      v = V > 5 ? 1 : 0;//(double) V / 255.0f;
+
+      if ( s == 0 )
+      {
+          // If s is 0, all colors are the same.
+          // This is some flavor of gray.
+          r = v;
+          g = v;
+          b = v;
+      }
+      else
+      {
+          double p;
+          double q;
+          double t;
+
+          double fractionalSector;
+          int sectorNumber;
+          double sectorPos;
+
+          // The color wheel consists of 6 sectors.
+          // Figure out which sector you are in.
+          sectorPos = h / 60.0f;
+          sectorNumber = (int)(floor(sectorPos));
+
+          // get the fractional part of the sector.
+          // That is, how many degrees into the sector are you?
+          fractionalSector = sectorPos - sectorNumber;
+
+          // Calculate values for the three axis of the color.
+          p = v * (1 - s);
+          q = v * (1 - (s * fractionalSector));
+          t = v * (1 - (s * (1 - fractionalSector)));
+
+          // Assign the fractional colors to r, g, and b
+          // based on the sector the angle is in.
+          switch (sectorNumber)
+          {
+          case 0:
+             r = v;
+             g = t;
+             b = p;
+             break;
+
+          case 1:
+             r = q;
+             g = v;
+             b = p;
+             break;
+
+          case 2:
+             r = p;
+             g = v;
+             b = t;
+             break;
+
+          case 3:
+             r = p;
+             g = q;
+             b = v;
+             break;
+
+          case 4:
+             r = t;
+             g = p;
+             b = v;
+             break;
+
+          case 5:
+             r = v;
+             g = p;
+             b = q;
+             break;
+          }
+      }
+
+      // return r, g and b as rgb_result with values scaled
+      // to be between 0 and 255.
+      int ri = r*255;
+      int gi = g*255;
+      int bi = b*255;
+      rgb_result = ((int32_t)ri << 16) + ((int32_t)gi << 8) + ((int32_t)bi);
+
+      return rgb_result;
+  }
 
   public:
     virtual bool setup(const TrikCvImageDesc& _inImageDesc,
@@ -387,14 +607,17 @@ void clasterizeImage()
       m_targetX = 0;
       m_targetY = 0;
       m_targetPoints = 0;
+      memset(c_color, 0, sizeof(int)*m*n*k);
 
-      uint32_t detectHueFrom = range<int32_t>(0, (static_cast<int32_t>(_inArgs.detectHueFrom) * 255) / 359, 255); // scaling 0..359 to 0..255
-      uint32_t detectHueTo   = range<int32_t>(0, (static_cast<int32_t>(_inArgs.detectHueTo  ) * 255) / 359, 255); // scaling 0..359 to 0..255
-      uint32_t detectSatFrom = range<int32_t>(0, (static_cast<int32_t>(_inArgs.detectSatFrom) * 255) / 100, 255); // scaling 0..100 to 0..255
-      uint32_t detectSatTo   = range<int32_t>(0, (static_cast<int32_t>(_inArgs.detectSatTo  ) * 255) / 100, 255); // scaling 0..100 to 0..255
-      uint32_t detectValFrom = range<int32_t>(0, (static_cast<int32_t>(_inArgs.detectValFrom) * 255) / 100, 255); // scaling 0..100 to 0..255
-      uint32_t detectValTo   = range<int32_t>(0, (static_cast<int32_t>(_inArgs.detectValTo  ) * 255) / 100, 255); // scaling 0..100 to 0..255
-      bool     autoDetectHsv = static_cast<bool>(_inArgs.autoDetectHsv); // true or false
+      uint32_t detectHueFrom = 0;//range<int32_t>(0, (static_cast<int32_t>(_inArgs.detectHueFrom) * 255) / 359, 255); // scaling 0..359 to 0..255
+      uint32_t detectHueTo   = 0;//range<int32_t>(0, (static_cast<int32_t>(_inArgs.detectHueTo  ) * 255) / 359, 255); // scaling 0..359 to 0..255
+      uint32_t detectSatFrom = 0;//range<int32_t>(0, (static_cast<int32_t>(_inArgs.detectSatFrom) * 255) / 100, 255); // scaling 0..100 to 0..255
+      uint32_t detectSatTo   = 0;//range<int32_t>(0, (static_cast<int32_t>(_inArgs.detectSatTo  ) * 255) / 100, 255); // scaling 0..100 to 0..255
+      uint32_t detectValFrom = 0;//range<int32_t>(0, (static_cast<int32_t>(_inArgs.detectValFrom) * 255) / 100, 255); // scaling 0..100 to 0..255
+      uint32_t detectValTo   = 0;//range<int32_t>(0, (static_cast<int32_t>(_inArgs.detectValTo  ) * 255) / 100, 255); // scaling 0..100 to 0..255
+      bool     autoDetectHsv = false;//static_cast<bool>(_inArgs.autoDetectHsv); // true or false
+      uint32_t inTreeColor   = _inArgs.inTreeColor;
+      uint32_t inTreeColorEntry   = _inArgs.inTreeColorEntry;
 
       if (detectHueFrom <= detectHueTo)
       {
@@ -417,16 +640,6 @@ void clasterizeImage()
       if (m_inImageDesc.m_height > 0 && m_inImageDesc.m_width > 0)
       {
         convertImageYuyvToHsv(_inImage);
-
-        if (autoDetectHsv)
-        {
-          HsvRangeDetector rangeDetector = HsvRangeDetector();
-          rangeDetector.detect(_outArgs.detectHue, _outArgs.detectHueTolerance,
-                               _outArgs.detectSat, _outArgs.detectSatTolerance,
-                               _outArgs.detectVal, _outArgs.detectValTolerance,
-                               s_rgb888hsv);
-        }
-
         proceedImageHsv(_outImage);
       }
 
@@ -445,26 +658,16 @@ void clasterizeImage()
       drawRgbTargetHorizontalCenterLine(160, 50, _outImage, 0xff00ff);
       drawRgbTargetHorizontalCenterLine(160, 190, _outImage, 0xff00ff);
 
-      if (m_targetPoints > 0)
-      {
-        const int32_t targetX = m_targetX/m_targetPoints;
-        const int32_t targetY = m_targetY/m_targetPoints;
+      uint32_t res_color = GetImgColor();
+      uint32_t res_colorEntry = 0;
 
-        assert(m_inImageDesc.m_height > 0 && m_inImageDesc.m_width > 0); // more or less safe since no target points would be detected otherwise
-        const uint32_t targetRadius = std::ceil(std::sqrt(static_cast<float>(m_targetPoints) / 3.1415927f));
+      fillImage(_outImage, res_color);
 
-        drawOutputCircle(targetX, targetY, targetRadius, _outImage, 0xffff00);
-
-        _outArgs.targetX = ((targetX - static_cast<int32_t>(m_inImageDesc.m_width) /2) * 100*2) / static_cast<int32_t>(m_inImageDesc.m_width);
-        _outArgs.targetY = ((targetY - static_cast<int32_t>(m_inImageDesc.m_height)/2) * 100*2) / static_cast<int32_t>(m_inImageDesc.m_height);
-        _outArgs.targetSize = static_cast<uint32_t>(targetRadius*100*4) / static_cast<uint32_t>(m_inImageDesc.m_width + m_inImageDesc.m_height);
-      }
-      else
-      {
-        _outArgs.targetX = 0;
-        _outArgs.targetY = 0;
-        _outArgs.targetSize = 0;
-      }
+      _outArgs.targetX = 0;
+      _outArgs.targetY = 0;
+      _outArgs.targetSize = 0;
+      _outArgs.outTreeColor = res_color;
+      _outArgs.outTreeColorEntry = res_colorEntry;
 
       return true;
     }
