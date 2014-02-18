@@ -41,7 +41,7 @@ class HsvRangeDetector
     static const int width = 320;
     static const int height = 240;
     
-    static const int imageScaleCoeff = 2;
+    static const int imageScaleCoeff = 1;
     static const int inImageStartRow = height - height/imageScaleCoeff;
     static const int inImageOfset    = inImageStartRow*width;
     static const int outImageOfset   = height/2;
@@ -60,9 +60,9 @@ class HsvRangeDetector
     static const int neg_b = height;
 
     //penalty coeffs
-    static const int K0 = 8;
+    static const int K0 = 4;
     static const int K1 = 1; 
-    static const int K2 = 8; 
+    static const int K2 = 6; 
 
     const double T_end = 0.0005;
 

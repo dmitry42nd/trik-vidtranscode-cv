@@ -131,6 +131,11 @@ public:
     return result;
   }
 
+  int angle()
+  {
+    return atan(a[1])*180/3.14159; // =(
+  }
+
   void approximate()
   {
     int i=0,j=0, k=0;
