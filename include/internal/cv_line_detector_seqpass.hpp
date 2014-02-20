@@ -415,7 +415,7 @@ class LineDetector<TRIK_VIDTRANSCODE_CV_VIDEO_FORMAT_YUV422, TRIK_VIDTRANSCODE_C
 
         if (autoDetectHsv)
         {
-          HsvRangeDetector rangeDetector = HsvRangeDetector();
+          HsvRangeDetector rangeDetector = HsvRangeDetector(m_inImageDesc.m_width, m_inImageDesc.m_height);
           rangeDetector.detect(_outArgs.detectHue, _outArgs.detectHueTolerance,
                                _outArgs.detectSat, _outArgs.detectSatTolerance,
                                _outArgs.detectVal, _outArgs.detectValTolerance,
@@ -430,11 +430,13 @@ class LineDetector<TRIK_VIDTRANSCODE_CV_VIDEO_FORMAT_YUV422, TRIK_VIDTRANSCODE_C
 #endif
 
       XDAS_Int32 drawY = m_inImageFirstRow - m_inImageDesc.m_height/2 + m_inImageDesc.m_height/(2*m_imageScaleCoeff);
+      const int hWidth = m_inImageDesc.m_width/2;
+      const int step = 40;
 
-      drawRgbThinLine(130, drawY, _outImage, 0xff00ff);
-      drawRgbThinLine(190, drawY, _outImage, 0xff00ff);
-      drawRgbThinLine( 90, drawY, _outImage, 0xff00ff);
-      drawRgbThinLine(230, drawY, _outImage, 0xff00ff);
+      drawRgbThinLine(hWidth - step, drawY, _outImage, 0xff00ff);
+      drawRgbThinLine(hWidth + step, drawY, _outImage, 0xff00ff);
+      drawRgbThinLine(hWidth - 2*step, drawY, _outImage, 0xff00ff);
+      drawRgbThinLine(hWidth + 2*step, drawY, _outImage, 0xff00ff);
 
 
       int notEmptyLvlsNum = 0;

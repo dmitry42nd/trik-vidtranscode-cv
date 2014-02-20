@@ -38,27 +38,26 @@ static int32_t s_hsv_clasters[cstrs_max_num][cstrs_max_num][cstrs_max_num];
 class HsvRangeDetector
 {
   private:
-    static const int width = 320;
-    static const int height = 240;
     
     static const int imageScaleCoeff = 1;
-    static const int inImageStartRow = height - height/imageScaleCoeff;
-    static const int inImageOfset    = inImageStartRow*width;
-    static const int outImageOfset   = height/2;
+    int inImageStartRow;
+    int inImageOfset;
+//    static const int outImageOfset   = height/2;
 
-
+    int width;
+    int height;
+    
     //positive image part bounds
-    static const int pos_l = 130;
-    static const int pos_r = 190;
-    static const int pos_t = inImageStartRow;
-    static const int pos_b = height;
+    int pos_l;
+    int pos_r;
+    int pos_t;
+    int pos_b;
 
     //negative image part bounds
-    static const int neg_l = 90;
-    static const int neg_r = 230;
-    static const int neg_t = inImageStartRow;
-    static const int neg_b = height;
-
+    int neg_l;
+    int neg_r;
+    int neg_t;
+    int neg_b;
     //penalty coeffs
     static const int K0 = 4;
     static const int K1 = 1; 
@@ -164,8 +163,30 @@ class HsvRangeDetector
     }
 
   public:
-    HsvRangeDetector()
-    {}
+    HsvRangeDetector(int _imgWidth, int _imgHeight/*, int _detectZoneScale*/)
+    {
+      width = _imgWidth;
+      height = _imgHeight;
+
+      int hHeight = height/2;
+      int hWidth = width/2;
+      int step = 40; //height/_detectZoneScale //better
+
+      inImageStartRow = height - height/imageScaleCoeff;
+      inImageOfset    = inImageStartRow*width;
+
+      pos_l = hWidth - step;
+      pos_r = hWidth + step;
+      pos_t = hHeight - step;
+      pos_b = hHeight + step;
+
+      //negative image part bounds
+      neg_l = hWidth - 2*step;
+      neg_r = hWidth + 2*step;
+      neg_t = hHeight - 2*step;
+      neg_b = hHeight + 2*step;
+    }
+
 
     void detect(uint16_t& _h, uint16_t& _hTol, uint16_t& _s, uint16_t& _sTol, uint16_t& _v, uint16_t& _vTol, uint64_t* _rgb888hsv) 
     {
