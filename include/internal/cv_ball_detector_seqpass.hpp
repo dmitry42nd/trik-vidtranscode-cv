@@ -29,6 +29,8 @@ template <>
 class BallDetector<TRIK_VIDTRANSCODE_CV_VIDEO_FORMAT_YUV422, TRIK_VIDTRANSCODE_CV_VIDEO_FORMAT_RGB565X> : public CVAlgorithm
 {
   private:
+    static const int m_detectZoneScale = 6;
+
     uint64_t m_detectRange;
     uint32_t m_detectExpected;
     uint32_t m_srcToDstShift;
@@ -420,7 +422,7 @@ void clasterizeImage()
 
         if (autoDetectHsv)
         {
-          HsvRangeDetector rangeDetector = HsvRangeDetector();
+          HsvRangeDetector rangeDetector = HsvRangeDetector(m_inImageDesc.m_width, m_inImageDesc.m_height, m_detectZoneScale);
           rangeDetector.detect(_outArgs.detectHue, _outArgs.detectHueTolerance,
                                _outArgs.detectSat, _outArgs.detectSatTolerance,
                                _outArgs.detectVal, _outArgs.detectValTolerance,
@@ -435,15 +437,19 @@ void clasterizeImage()
 #endif
 
       //draw taget pointer
-      drawRgbTargetCenterLine(130, 120, _outImage, 0xff00ff);
-      drawRgbTargetCenterLine(190, 120, _outImage, 0xff00ff);
-      drawRgbTargetCenterLine(90,  120, _outImage, 0xff00ff);
-      drawRgbTargetCenterLine(230, 120, _outImage, 0xff00ff);
+      const int step = m_inImageDesc.m_height/m_detectZoneScale;
+      const int hHeight = m_inImageDesc.m_height/2;
+      const int hWidth = m_inImageDesc.m_width/2;
 
-      drawRgbTargetHorizontalCenterLine(160, 90, _outImage, 0xff00ff);
-      drawRgbTargetHorizontalCenterLine(160, 150, _outImage, 0xff00ff);
-      drawRgbTargetHorizontalCenterLine(160, 50, _outImage, 0xff00ff);
-      drawRgbTargetHorizontalCenterLine(160, 190, _outImage, 0xff00ff);
+      drawRgbTargetCenterLine(hWidth - step, hHeight, _outImage, 0xff00ff);
+      drawRgbTargetCenterLine(hWidth + step, hHeight, _outImage, 0xff00ff);
+      drawRgbTargetCenterLine(hWidth - 2*step,  hHeight, _outImage, 0xff00ff);
+      drawRgbTargetCenterLine(hWidth + 2*step, hHeight, _outImage, 0xff00ff);
+
+      drawRgbTargetHorizontalCenterLine(hWidth, hHeight - step, _outImage, 0xff00ff);
+      drawRgbTargetHorizontalCenterLine(hWidth, hHeight + step, _outImage, 0xff00ff);
+      drawRgbTargetHorizontalCenterLine(hWidth, hHeight - 2*step, _outImage, 0xff00ff);
+      drawRgbTargetHorizontalCenterLine(hWidth, hHeight + 2*step, _outImage, 0xff00ff);
 
       if (m_targetPoints > 0)
       {
