@@ -22,9 +22,10 @@
 #warning Eliminate global var
 static uint64_t s_rgb888hsv[640*480];
 
-const int m = 256 / 4;    // partition of axis h in 32 parts
-const int n = 256 / 64;   // s in 4 parts
-const int k = 256 / 64;   // v in 4 parts
+const int m = 256 / 4;    // partition of axis h in 128 parts
+const int n = 256 / 8;   // s in 32 parts
+const int k = 256 / 8;   // v in 32 parts
+
 
 static int c_color[m][n][k]; // massiv of clusters 32x8x8
 
@@ -393,10 +394,10 @@ void clasterizeImage()
             else ch = pixel.parts.h / 4;
 
             if(pixel.parts.s == 0) cs = 0;
-            else cs = pixel.parts.s / 64;
+            else cs = pixel.parts.s / 8;
 
             if(pixel.parts.v == 0) cv = 0;
-            else cv = pixel.parts.v / 64;
+            else cv = pixel.parts.v / 8;
 
             c_color[ch][cs][cv]++;
           }
@@ -423,8 +424,8 @@ void clasterizeImage()
       // return h, s and v as h_max, s_max and _max with values
       // scaled to be between 0 and 255.
       int hue = ch_max * 4;
-      int sat = cs_max * 64;
-      int val = cv_max * 64;
+      int sat = cs_max * 8;
+      int val = cv_max * 8;
 
       rgb_result = HSVtoRGB(hue, sat, val);
 
@@ -441,6 +442,31 @@ void clasterizeImage()
       *_color2      = rgb_result2;
       *_colorEntry2 = max_number_of_pix2;
 */
+  }
+
+  void getTrueSV(double& rV, double& rS, double _v, double _s)
+  {
+    float boundV = 0.1/(_s - 1.0) + 1.0;
+    float boundS = 0.1/(_v - 1.0) + 1.0;
+
+    if (!((_s < boundS) && (_v < boundV))) //not ok
+    {
+      float A = 10.0*_s/_v;
+      float B = -10.0*(_s/_v + 1);
+      const float C = 9;
+
+      float D = pow(B,2) - 4*A*C;
+      float X1 = (-B -sqrt(D))/(2*A);
+      float X2 = (-B +sqrt(D))/(2*A);
+
+      rV = X1 <= X2 ? X1 : X2;
+      rS = _s*rV/_v;
+    } 
+    else //ok
+    {
+      rV = _v;
+      rS = _s;
+    }
   }
 
   uint32_t HSVtoRGB(int H, int S, int V)
@@ -466,8 +492,12 @@ void clasterizeImage()
       // Scale Hue to be between 0 and 360. Saturation
       // and value scale to be between 0 and 1.
       h = (double)((int)((double) H / 255.0f * 360.0f) % 360);
-      s = S > 5 ? 1 : 0;//(double) S / 255.0f;
-      v = V > 5 ? 1 : 0;//(double) V / 255.0f;
+
+      s = S / 255.0f;//(double) S / 255.0f;
+      v = V / 255.0f;//(double) V / 255.0f;
+      getTrueSV(v ,s, v ,s);
+      v = v < 0.2 ? 0 : v;
+      s = s < 0.2 ? 0 : 1;
 
       if ( s == 0 )
       {
