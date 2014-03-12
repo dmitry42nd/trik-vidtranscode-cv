@@ -177,14 +177,14 @@ class HsvRangeDetector
 
       pos_l = hWidth - step;
       pos_r = hWidth + step;
-      pos_t = hHeight - step;
-      pos_b = hHeight + step;
+      pos_t = 0;
+      pos_b = height;
 
       //negative image part bounds
       neg_l = hWidth - 2*step;
       neg_r = hWidth + 2*step;
-      neg_t = hHeight - 2*step;
-      neg_b = hHeight + 2*step;
+      neg_t = 0;
+      neg_b = height;
     }
 
 
