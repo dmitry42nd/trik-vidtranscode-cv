@@ -37,17 +37,11 @@ class LineDetector<TRIK_VIDTRANSCODE_CV_VIDEO_FORMAT_YUV422, TRIK_VIDTRANSCODE_C
 
 
     const int m_imageScaleCoeff = 1;
-
-    const int m_lvlsNum = 3;
-
-    int      m_lvlHeight;
-    uint32_t m_inImageFirstRow;
+    const int m_inImageFirstRow;
 
     int32_t  m_targetX;
-    int32_t  m_targetXs[m_lvlsNum];
-    int32_t  m_targetYs[m_lvlsNum];
+    int32_t  m_targetY;
     uint32_t m_targetPoints;
-    uint32_t m_targetPointss[m_lvlsNum];
 
     TrikCvImageDesc m_inImageDesc;
     TrikCvImageDesc m_outImageDesc;
@@ -98,7 +92,7 @@ class LineDetector<TRIK_VIDTRANSCODE_CV_VIDEO_FORMAT_YUV422, TRIK_VIDTRANSCODE_C
       const int32_t heightBot = 0;
       const int32_t heightTop = m_inImageDesc.m_height-1;
 
-      for (int adj = 0; adj < m_inImageDesc.m_height/(m_imageScaleCoeff*m_lvlsNum); ++adj)
+      for (int adj = 0; adj < m_inImageDesc.m_height/(m_imageScaleCoeff); ++adj)
       {
         drawOutputPixelBound(_srcCol-1, _srcRow+adj, widthBot, widthTop, heightBot, heightTop, _outImage, _rgb888);
         drawOutputPixelBound(_srcCol  , _srcRow+adj, widthBot, widthTop, heightBot, heightTop, _outImage, _rgb888);
@@ -235,74 +229,42 @@ class LineDetector<TRIK_VIDTRANSCODE_CV_VIDEO_FORMAT_YUV422, TRIK_VIDTRANSCODE_C
       }
     }
 
-    void DEBUG_INLINE proceedImageHsv(int32_t& _targetX, uint32_t& _targetPoints, TrikCvImageBuffer& _outImage, 
-                                                                                   uint32_t _inImageStartLvlRow,
-                                                                                   uint32_t _inImageFinishLvlRow)
+    void DEBUG_INLINE proceedImageHsv(TrikCvImageBuffer& _outImage)
     {
-      const uint32_t inImageOfset    = _inImageStartLvlRow*m_inImageDesc.m_width;
-
+      const uint64_t* restrict rgb888hsvptr = s_rgb888hsv;
       const uint32_t width          = m_inImageDesc.m_width;
       const uint32_t height         = m_inImageDesc.m_height;
       const uint32_t dstLineLength  = m_outImageDesc.m_lineLength;
       const uint32_t srcToDstShift  = m_srcToDstShift;
       const uint64_t u64_hsv_range  = m_detectRange;
       const uint32_t u32_hsv_expect = m_detectExpected;
-      const uint64_t* restrict rgb888hsvptr = s_rgb888hsv + inImageOfset;
-
       uint32_t targetPointsPerRow;
       uint32_t targetPointsCol;
 
       assert(m_inImageDesc.m_height % 4 == 0); // verified in setup
-
 #pragma MUST_ITERATE(4, ,4)
-      for (uint32_t srcRow=_inImageStartLvlRow; srcRow < _inImageFinishLvlRow; ++srcRow)
+      for (uint32_t srcRow=m_inImageFirstRow; srcRow < height; ++srcRow)
       {
         const uint32_t dstRow = (srcRow - m_inImageFirstRow/2);//>> srcToDstShift;
         uint16_t* restrict dstImageRow = reinterpret_cast<uint16_t*>(_outImage.m_ptr + dstRow*dstLineLength);
 
         targetPointsPerRow = 0;
         targetPointsCol = 0;
-
         assert(m_inImageDesc.m_width % 32 == 0); // verified in setup
 #pragma MUST_ITERATE(32, ,32)
         for (uint32_t srcCol=0; srcCol < width; ++srcCol)
         {
           const uint32_t dstCol    = srcCol * 0.75f;//srcCol >> srcToDstShift;
-          const uint64_t rgb888hsv = *(rgb888hsvptr)++;
+          const uint64_t rgb888hsv = *rgb888hsvptr++;
 
           const bool det = detectHsvPixel(_loll(rgb888hsv), u64_hsv_range, u32_hsv_expect);
           targetPointsPerRow += det;
           targetPointsCol += det?srcCol:0;
           writeOutputPixel(dstImageRow+dstCol, det?0x00ffff:_hill(rgb888hsv));
         }
-        _targetX      += targetPointsCol;
-        _targetPoints += targetPointsPerRow;
-      }
-    }
-
-    void DEBUG_INLINE proceedImageHsvByLevels(TrikCvImageBuffer& _outImage)
-    {
-      uint32_t inImageStartLvlRow  = m_inImageFirstRow;
-      uint32_t inImageFinishLvlRow = m_inImageFirstRow + m_lvlHeight;
-
-#pragma MUST_ITERATE(m_lvlsNum, , m_lvlsNum)
-      for(int lvlId = 0; lvlId < m_lvlsNum; lvlId++)
-      {
-        proceedImageHsv(m_targetXs[lvlId], m_targetPointss[lvlId], _outImage, inImageStartLvlRow, inImageFinishLvlRow);
-        inImageStartLvlRow   = inImageFinishLvlRow;
-        inImageFinishLvlRow += m_lvlHeight;
-      }
-
-    }
-
-    void __attribute__((always_inline)) drawRgbTargetCenterLines(int _lvlsNum,
-                                                                 const TrikCvImageBuffer& _outImage,
-                                                                 const uint32_t _rgb888)
-    {
-//#pragma MUST_ITERATE(m_lvlsNum, , m_lvlsNum)
-      for(int lvlId = 0; lvlId < _lvlsNum; lvlId++)
-      {
-        drawRgbTargetCenterLine(m_targetXs[lvlId], m_targetYs[lvlId] - m_lvlHeight, _outImage, 0xff0000);
+        m_targetX      += targetPointsCol;
+        m_targetY      += srcRow*targetPointsPerRow;
+        m_targetPoints += targetPointsPerRow;
       }
     }
 
@@ -380,7 +342,7 @@ class LineDetector<TRIK_VIDTRANSCODE_CV_VIDEO_FORMAT_YUV422, TRIK_VIDTRANSCODE_C
       memset(m_targetXs, 0, m_lvlsNum*sizeof(int32_t));
       memset(m_targetYs, 0, m_lvlsNum*sizeof(int32_t));
       memset(m_targetPointss, 0, m_lvlsNum*sizeof(int32_t));
-      m_lvlHeight = m_inImageDesc.m_height/(m_imageScaleCoeff*m_lvlsNum);
+
       m_inImageFirstRow = m_inImageDesc.m_height - m_inImageDesc.m_height/m_imageScaleCoeff;
 
       uint32_t detectHueFrom = range<int32_t>(0, (static_cast<int32_t>(_inArgs.detectHueFrom) * 255) / 359, 255); // scaling 0..359 to 0..255
@@ -422,7 +384,7 @@ class LineDetector<TRIK_VIDTRANSCODE_CV_VIDEO_FORMAT_YUV422, TRIK_VIDTRANSCODE_C
                                s_rgb888hsv);
         }
 
-        proceedImageHsvByLevels(_outImage);
+        proceedImageHsv(_outImage);
       }
 
 #ifdef DEBUG_REPEAT
@@ -438,55 +400,22 @@ class LineDetector<TRIK_VIDTRANSCODE_CV_VIDEO_FORMAT_YUV422, TRIK_VIDTRANSCODE_C
       drawRgbThinLine(hWidth - 2*step, drawY, _outImage, 0xff00ff);
       drawRgbThinLine(hWidth + 2*step, drawY, _outImage, 0xff00ff);
 
-
-      int notEmptyLvlsNum = 0;
-      int tmpY = drawY;
-      int32_t targetPointsSum = 0;
-
-      for(int lvlId = 0; lvlId < m_lvlsNum; lvlId++)
-      {
-        tmpY += m_lvlHeight;
-        if(m_targetPointss[lvlId] > 20) //some kind of trashold
-        {
-          targetPointsSum += m_targetPointss[lvlId];
-          m_targetXs[notEmptyLvlsNum] = m_targetXs[lvlId]/m_targetPointss[lvlId];
-          m_targetYs[notEmptyLvlsNum] = tmpY;// + m_lvlHeight/2;
-          notEmptyLvlsNum++;
-        }
-      }
-
       _outArgs.targetX = 0;
       _outArgs.targetY = 0;
       _outArgs.targetSize = 0;
 
-      if (targetPointsSum > 10)
+      if (m_targetPointsSum > 10)
       {
         const int32_t inImagePixels = m_inImageDesc.m_height * m_inImageDesc.m_width;
+        const int32_t targetX = m_targetX/m_targetPoints;
+        const int32_t targetY = m_targetY/m_targetPoints
 
         assert(m_inImageDesc.m_height > 0 && m_inImageDesc.m_width > 0); // more or less safe since no target points would be detected otherwise
 
-        drawRgbTargetCenterLines(notEmptyLvlsNum, _outImage, 0xff0000);
+        drawRgbTargetCenterLine(targetX, drawY, notEmptyLvlsNum, _outImage, 0xff0000);
 
-        if (m_targetPointss[1] > 20)  
-        {
-          _outArgs.targetX = ((m_targetXs[1] - static_cast<int32_t>(m_inImageDesc.m_width) /2) * 100*2) / static_cast<int32_t>(m_inImageDesc.m_width);
-          _outArgs.targetSize = static_cast<XDAS_UInt32>(targetPointsSum*100*m_imageScaleCoeff)/inImagePixels;
-        } 
-        else if (m_targetPointss[notEmptyLvlsNum - 1] > 20)
-        {
-          _outArgs.targetX = ((m_targetXs[notEmptyLvlsNum - 1] - static_cast<int32_t>(m_inImageDesc.m_width) /2) * 100*2) / static_cast<int32_t>(m_inImageDesc.m_width);
-          _outArgs.targetSize = static_cast<XDAS_UInt32>(targetPointsSum*100*m_imageScaleCoeff)/inImagePixels;
-        }
-        else if (m_targetPointss[0] > 20)
-        {
-          _outArgs.targetX = ((m_targetXs[0] - static_cast<int32_t>(m_inImageDesc.m_width) /2) * 100*2) / static_cast<int32_t>(m_inImageDesc.m_width);
-          _outArgs.targetSize = static_cast<XDAS_UInt32>(targetPointsSum*100*m_imageScaleCoeff)/inImagePixels;
-        }
-      }
-
-      if (m_targetPointss[2] < 20)
-      {
-        _outArgs.targetY = 1;
+        _outArgs.targetX = ((targetX - static_cast<int32_t>(m_inImageDesc.m_width) /2) * 100*2) / static_cast<int32_t>(m_inImageDesc.m_width);
+        _outArgs.targetSize = static_cast<XDAS_UInt32>(targetPointsSum*100*m_imageScaleCoeff)/inImagePixels;
       }
 
       return true;
