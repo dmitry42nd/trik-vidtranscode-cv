@@ -37,7 +37,7 @@ class LineDetector<TRIK_VIDTRANSCODE_CV_VIDEO_FORMAT_YUV422, TRIK_VIDTRANSCODE_C
 
 
     const int m_imageScaleCoeff = 1;
-    const int m_inImageFirstRow;
+    int m_inImageFirstRow;
 
     int32_t  m_targetX;
     int32_t  m_targetY;
@@ -339,9 +339,6 @@ class LineDetector<TRIK_VIDTRANSCODE_CV_VIDEO_FORMAT_YUV422, TRIK_VIDTRANSCODE_C
 
       m_targetX = 0;
       m_targetPoints = 0;
-      memset(m_targetXs, 0, m_lvlsNum*sizeof(int32_t));
-      memset(m_targetYs, 0, m_lvlsNum*sizeof(int32_t));
-      memset(m_targetPointss, 0, m_lvlsNum*sizeof(int32_t));
 
       m_inImageFirstRow = m_inImageDesc.m_height - m_inImageDesc.m_height/m_imageScaleCoeff;
 
@@ -404,18 +401,18 @@ class LineDetector<TRIK_VIDTRANSCODE_CV_VIDEO_FORMAT_YUV422, TRIK_VIDTRANSCODE_C
       _outArgs.targetY = 0;
       _outArgs.targetSize = 0;
 
-      if (m_targetPointsSum > 10)
+      if (m_targetPoints > 10)
       {
         const int32_t inImagePixels = m_inImageDesc.m_height * m_inImageDesc.m_width;
         const int32_t targetX = m_targetX/m_targetPoints;
-        const int32_t targetY = m_targetY/m_targetPoints
+//         const int32_t targetY = m_targetY/m_targetPoints;
 
         assert(m_inImageDesc.m_height > 0 && m_inImageDesc.m_width > 0); // more or less safe since no target points would be detected otherwise
 
-        drawRgbTargetCenterLine(targetX, drawY, notEmptyLvlsNum, _outImage, 0xff0000);
+        drawRgbTargetCenterLine(targetX, drawY, _outImage, 0xff0000);
 
         _outArgs.targetX = ((targetX - static_cast<int32_t>(m_inImageDesc.m_width) /2) * 100*2) / static_cast<int32_t>(m_inImageDesc.m_width);
-        _outArgs.targetSize = static_cast<XDAS_UInt32>(targetPointsSum*100*m_imageScaleCoeff)/inImagePixels;
+        _outArgs.targetSize = static_cast<XDAS_UInt32>(m_targetPoints*100*m_imageScaleCoeff)/inImagePixels;
       }
 
       return true;
