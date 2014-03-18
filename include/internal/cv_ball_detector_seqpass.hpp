@@ -12,6 +12,7 @@
 #include "internal/stdcpp.hpp"
 #include "trik_vidtranscode_cv.h"
 #include "internal/cv_hsv_range_detector.hpp"
+#include "internal/cv_bitmap_builder.hpp"
 
 
 /* **** **** **** **** **** */ namespace trik /* **** **** **** **** **** */ {
@@ -22,6 +23,7 @@
 
 #warning Eliminate global var
 static uint64_t s_rgb888hsv[640*480];
+static uint16_t s_bitmap[640*480];
 
 
 
@@ -39,6 +41,7 @@ class BallDetector<TRIK_VIDTRANSCODE_CV_VIDEO_FORMAT_YUV422, TRIK_VIDTRANSCODE_C
     int32_t  m_targetY;
     uint32_t m_targetPoints;
 
+    BitmapBuilder m_bitmapBuilder;
     TrikCvImageDesc m_inImageDesc;
     TrikCvImageDesc m_outImageDesc;
 
@@ -374,6 +377,11 @@ void clasterizeImage()
         }
       }
 
+      const TrikCvImageDesc inRgb888HsvImgDesc = {320, 240, 320*sizeof(uint64_t), TRIK_VIDTRANSCODE_CV_VIDEO_FORMAT_RGB888HSV};
+      const TrikCvImageDesc outBitmapDesc = {320/4, 240/4, 320/4*sizeof(uint16_t),   TRIK_VIDTRANSCODE_CV_VIDEO_FORMAT_METABITMAP};
+      m_bitmapBuilder.setup(inRgb888HsvImgDesc, outBitmapDesc, _fastRam, _fastRamSize);
+
+
       return true;
     }
 
@@ -386,31 +394,12 @@ void clasterizeImage()
         return false;
       _outImage.m_size = m_outImageDesc.m_height * m_outImageDesc.m_lineLength;
 
+      bool autoDetectHsv = static_cast<bool>(_inArgs.autoDetectHsv); // true or false
+
       m_targetX = 0;
       m_targetY = 0;
       m_targetPoints = 0;
 
-      uint32_t detectHueFrom = range<int32_t>(0, (static_cast<int32_t>(_inArgs.detectHueFrom) * 255) / 359, 255); // scaling 0..359 to 0..255
-      uint32_t detectHueTo   = range<int32_t>(0, (static_cast<int32_t>(_inArgs.detectHueTo  ) * 255) / 359, 255); // scaling 0..359 to 0..255
-      uint32_t detectSatFrom = range<int32_t>(0, (static_cast<int32_t>(_inArgs.detectSatFrom) * 255) / 100, 255); // scaling 0..100 to 0..255
-      uint32_t detectSatTo   = range<int32_t>(0, (static_cast<int32_t>(_inArgs.detectSatTo  ) * 255) / 100, 255); // scaling 0..100 to 0..255
-      uint32_t detectValFrom = range<int32_t>(0, (static_cast<int32_t>(_inArgs.detectValFrom) * 255) / 100, 255); // scaling 0..100 to 0..255
-      uint32_t detectValTo   = range<int32_t>(0, (static_cast<int32_t>(_inArgs.detectValTo  ) * 255) / 100, 255); // scaling 0..100 to 0..255
-      bool     autoDetectHsv = static_cast<bool>(_inArgs.autoDetectHsv); // true or false
-
-      if (detectHueFrom <= detectHueTo)
-      {
-        m_detectRange = _itoll((detectValFrom<<16) | (detectSatFrom<<8) | detectHueFrom,
-                               (detectValTo  <<16) | (detectSatTo  <<8) | detectHueTo  );
-        m_detectExpected = 0x0;
-      }
-      else
-      {
-        assert(detectHueFrom > 0 && detectHueTo < 255);
-        m_detectRange = _itoll((detectValFrom<<16) | (detectSatFrom<<8) | (detectHueTo  +1),
-                               (detectValTo  <<16) | (detectSatTo  <<8) | (detectHueFrom-1));
-        m_detectExpected = 0x1;
-      }
 
 #ifdef DEBUG_REPEAT
       for (unsigned repeat = 0; repeat < DEBUG_REPEAT; ++repeat) {
@@ -429,7 +418,15 @@ void clasterizeImage()
                                s_rgb888hsv);
         }
 
-        proceedImageHsv(_outImage);
+        TrikCvImageBuffer inRgb888HsvImg;
+        inRgb888HsvImg.m_ptr = reinterpret_cast<TrikCvImagePtr>(s_rgb888hsv);
+        inRgb888HsvImg.m_size = 640*480*8;
+
+        TrikCvImageBuffer outBitmap;
+        outBitmap.m_ptr = reinterpret_cast<TrikCvImagePtr>(s_bitmap);
+        outBitmap.m_size = 640*480*8;
+
+        m_bitmapBuilder.run(inRgb888HsvImg, outBitmap, _inArgs, _outArgs);
       }
 
 #ifdef DEBUG_REPEAT
