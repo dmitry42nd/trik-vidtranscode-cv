@@ -436,7 +436,16 @@ void clasterizeImage()
 
       bool autoDetectHsv = static_cast<bool>(_inArgs.autoDetectHsv); // true or false
 
-      memset(s_factormap, 1, 640*480*2);
+//      memset(s_factormap, 1, 640*480*2);
+
+//      #pragma MUST_ITERATE(640*480,,640*480)
+      uint16_t* restrict p = s_factormap;
+      for (int i = 0; i < 640*480; i++)
+      {
+        *p = 0xffff;
+        p++;
+      }
+
       memset(s_bitmap, 0, 640*480*2);
 
       m_targetX = 0;
@@ -505,7 +514,7 @@ void clasterizeImage()
 //          const uint16_t bitmap = *(bitmapRow + (dstCol >> 2));
           const uint16_t factormap = *(factormapRow + (dstCol >> 2));
 
-          const bool det = (factormap < 0xFF);
+          const bool det = (factormap < 0x10);
           targetPointsPerRow += det;
           targetPointsCol += det?dstCol:0;
           writeOutputPixel(dstImage++, det?0x00ffff:_hill(rgb888hsv));

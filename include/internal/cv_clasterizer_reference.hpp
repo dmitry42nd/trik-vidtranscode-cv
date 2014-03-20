@@ -30,7 +30,7 @@ class Clasterizer : public CVAlgorithm
     std::vector<XDAS_UInt16> m_mult43_div;
 
     uint16_t max_factor_num; // = 1;
-    const uint16_t NO_FACTOR = 0xFF;
+    const uint16_t NO_FACTOR = 0xFFFF;
 
 
     uint16_t pop(uint16_t x)
@@ -155,12 +155,14 @@ class Clasterizer : public CVAlgorithm
 
 
         setPixelFullEnvironment(pixPtr, &(a[0]), &(a[1]), &(a[2]), &(a[3]), &(a[4]), &(a[5]), &(a[6]), &(a[7]), r, c);
-/*
+
+        uint16_t test = min(a, envPixNum);
+
         if (min(a, envPixNum) != NO_FACTOR)
         {
             if(*(a[0]) != NO_FACTOR && *(a[0]) != factor_num)
                 resetFactorNum((a[0]), factor_num, r, c-1);
-
+/*
             for(int i = 1; i < 4; i++)
                 if(*(a[i]) != NO_FACTOR && *(a[i]) != factor_num)
                     resetFactorNum((a[i]), factor_num, r-1, c+i-2);
@@ -168,11 +170,13 @@ class Clasterizer : public CVAlgorithm
             if(*(a[4]) != NO_FACTOR && *(a[4]) != factor_num)
                 resetFactorNum((a[4]), factor_num, r, c+1);
 
-            for(int i = 5; i < 8;i++)
+            for(int i = 5; i < 8; i++)
                 if(*(a[i]) != NO_FACTOR && *(a[i]) != factor_num)
                     resetFactorNum((a[i]), factor_num, r+1, c+i-6);
-        }
 */
+        }
+
+
     }
 
 
