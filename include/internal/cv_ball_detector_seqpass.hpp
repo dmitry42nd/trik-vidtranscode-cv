@@ -514,7 +514,7 @@ void clasterizeImage()
 //          const uint16_t bitmap = *(bitmapRow + (dstCol >> 2));
           const uint16_t factormap = *(factormapRow + (dstCol >> 2));
 
-          const bool det = (factormap < 0x10);
+          const bool det = (factormap < 0xFFFF);
           targetPointsPerRow += det;
           targetPointsCol += det?dstCol:0;
           writeOutputPixel(dstImage++, det?0x00ffff:_hill(rgb888hsv));

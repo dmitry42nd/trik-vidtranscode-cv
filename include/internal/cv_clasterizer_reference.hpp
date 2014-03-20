@@ -143,6 +143,8 @@ class Clasterizer : public CVAlgorithm
 
     void resetFactorNum(uint16_t* pixPtr, int factor_num, int r, int c)
     {
+      if(r >= 0 && r < m_inImageDesc.m_height && c >=0 && c < m_inImageDesc.m_width)
+      {
         uint16_t default_factor = NO_FACTOR;
 
         const uint16_t envPixNum = 8;
@@ -166,17 +168,17 @@ class Clasterizer : public CVAlgorithm
             for(int i = 1; i < 4; i++)
                 if(*(a[i]) != NO_FACTOR && *(a[i]) != factor_num)
                     resetFactorNum((a[i]), factor_num, r-1, c+i-2);
-
+*/
             if(*(a[4]) != NO_FACTOR && *(a[4]) != factor_num)
                 resetFactorNum((a[4]), factor_num, r, c+1);
 
+/*
             for(int i = 5; i < 8; i++)
                 if(*(a[i]) != NO_FACTOR && *(a[i]) != factor_num)
                     resetFactorNum((a[i]), factor_num, r+1, c+i-6);
 */
         }
-
-
+      }
     }
 
 
