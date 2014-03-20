@@ -13,6 +13,7 @@
 #include "trik_vidtranscode_cv.h"
 #include "internal/cv_hsv_range_detector.hpp"
 #include "internal/cv_bitmap_builder.hpp"
+#include "internal/cv_clasterizer.hpp"
 
 
 /* **** **** **** **** **** */ namespace trik /* **** **** **** **** **** */ {
@@ -24,6 +25,7 @@
 #warning Eliminate global var
 static uint64_t s_rgb888hsv[640*480];
 static uint16_t s_bitmap[640*480];
+static uint16_t s_factormap[640*480];
 
 
 
@@ -42,8 +44,14 @@ class BallDetector<TRIK_VIDTRANSCODE_CV_VIDEO_FORMAT_YUV422, TRIK_VIDTRANSCODE_C
     uint32_t m_targetPoints;
 
     BitmapBuilder m_bitmapBuilder;
+    Clasterizer   m_clasterizer;
+
     TrikCvImageDesc m_inImageDesc;
     TrikCvImageDesc m_outImageDesc;
+
+    TrikCvImageDesc inRgb888HsvImgDesc;
+    TrikCvImageDesc bitmapDesc;
+    TrikCvImageDesc factormapDesc;
 
     static uint16_t* restrict s_mult43_div;  // allocated from fast ram
     static uint16_t* restrict s_mult255_div; // allocated from fast ram
@@ -301,6 +309,7 @@ void clasterizeImage()
     void DEBUG_INLINE proceedImageHsv(TrikCvImageBuffer& _outImage)
     {
       const uint64_t* restrict rgb888hsvptr = s_rgb888hsv;
+      //const uint16_t* restrict bitmapptr = s_bitmap;
       const uint32_t width          = m_inImageDesc.m_width;
       const uint32_t height         = m_inImageDesc.m_height;
       const uint32_t dstLineLength  = m_outImageDesc.m_lineLength;
@@ -317,6 +326,8 @@ void clasterizeImage()
         const uint32_t dstRow = srcRow >> srcToDstShift;
         uint16_t* restrict dstImageRow = reinterpret_cast<uint16_t*>(_outImage.m_ptr + dstRow*dstLineLength);
 
+        uint16_t* restrict bitmapRow = reinterpret_cast<uint16_t*>(s_bitmap + (dstRow >> 2)*bitmapDesc.m_lineLength);;
+
         targetPointsPerRow = 0;
         targetPointsCol = 0;
         assert(m_inImageDesc.m_width % 32 == 0); // verified in setup
@@ -325,8 +336,9 @@ void clasterizeImage()
         {
           const uint32_t dstCol    = srcCol >> srcToDstShift;
           const uint64_t rgb888hsv = *rgb888hsvptr++;
+          const uint16_t bitmap = *(bitmapRow + (dstCol >> 2));
 
-          const bool det = detectHsvPixel(_loll(rgb888hsv), u64_hsv_range, u32_hsv_expect);
+          const bool det = (pop(bitmap) > 3);
           targetPointsPerRow += det;
           targetPointsCol += det?srcCol:0;
           writeOutputPixel(dstImageRow+dstCol, det?0x00ffff:_hill(rgb888hsv));
@@ -335,6 +347,19 @@ void clasterizeImage()
         m_targetY      += srcRow*targetPointsPerRow;
         m_targetPoints += targetPointsPerRow;
       }
+    }
+
+
+
+    uint16_t pop(uint16_t x)
+    {
+      x = x - ((x >> 1) & 0x5555);
+      x = (x & 0x3333) + ((x >> 2) & 0x3333);
+      x = (x + (x >> 4)) & 0x0f0f;
+      x = x + (x >> 8);
+      x = x + (x >> 16);
+
+      return x & 0x003f;
     }
 
 
@@ -377,10 +402,25 @@ void clasterizeImage()
         }
       }
 
-      const TrikCvImageDesc inRgb888HsvImgDesc = {320, 240, 320*sizeof(uint64_t), TRIK_VIDTRANSCODE_CV_VIDEO_FORMAT_RGB888HSV};
-      const TrikCvImageDesc outBitmapDesc = {320/4, 240/4, 320/4*sizeof(uint16_t),   TRIK_VIDTRANSCODE_CV_VIDEO_FORMAT_METABITMAP};
-      m_bitmapBuilder.setup(inRgb888HsvImgDesc, outBitmapDesc, _fastRam, _fastRamSize);
+      inRgb888HsvImgDesc.m_width = 320;
+      inRgb888HsvImgDesc.m_height = 240;
+      inRgb888HsvImgDesc.m_lineLength = 320*sizeof(uint64_t);
+      inRgb888HsvImgDesc.m_format = TRIK_VIDTRANSCODE_CV_VIDEO_FORMAT_RGB888HSV;
+      
+      bitmapDesc.m_width = 320/4;
+      bitmapDesc.m_height = 240/4;
+      bitmapDesc.m_lineLength = (320/4)*sizeof(uint16_t);
+      bitmapDesc.m_format = TRIK_VIDTRANSCODE_CV_VIDEO_FORMAT_METABITMAP;
 
+
+      factormapDesc.m_width = 320/4;
+      factormapDesc.m_height = 240/4;
+      factormapDesc.m_lineLength = 320/4;
+      factormapDesc.m_format = TRIK_VIDTRANSCODE_CV_VIDEO_FORMAT_METABITMAP;
+
+
+      m_bitmapBuilder.setup(inRgb888HsvImgDesc, bitmapDesc, _fastRam, _fastRamSize);
+      m_clasterizer.setup(bitmapDesc, factormapDesc, _fastRam, _fastRamSize);
 
       return true;
     }
@@ -395,6 +435,9 @@ void clasterizeImage()
       _outImage.m_size = m_outImageDesc.m_height * m_outImageDesc.m_lineLength;
 
       bool autoDetectHsv = static_cast<bool>(_inArgs.autoDetectHsv); // true or false
+
+      memset(s_factormap, 1, 640*480*2);
+      memset(s_bitmap, 0, 640*480*2);
 
       m_targetX = 0;
       m_targetY = 0;
@@ -422,11 +465,56 @@ void clasterizeImage()
         inRgb888HsvImg.m_ptr = reinterpret_cast<TrikCvImagePtr>(s_rgb888hsv);
         inRgb888HsvImg.m_size = 640*480*8;
 
-        TrikCvImageBuffer outBitmap;
-        outBitmap.m_ptr = reinterpret_cast<TrikCvImagePtr>(s_bitmap);
-        outBitmap.m_size = 640*480*8;
+        TrikCvImageBuffer bitmap;
+        bitmap.m_ptr = reinterpret_cast<TrikCvImagePtr>(s_bitmap);
+        bitmap.m_size = 640*480*2;
 
-        m_bitmapBuilder.run(inRgb888HsvImg, outBitmap, _inArgs, _outArgs);
+        TrikCvImageBuffer factormap;
+        factormap.m_ptr = reinterpret_cast<TrikCvImagePtr>(s_factormap);
+        factormap.m_size = 640*480*2;
+
+        m_bitmapBuilder.run(inRgb888HsvImg, bitmap, _inArgs, _outArgs);
+        m_clasterizer.run(bitmap, factormap, _inArgs, _outArgs);
+
+
+      const uint64_t* restrict rgb888hsvptr = s_rgb888hsv;
+      uint16_t* restrict dstImage = reinterpret_cast<uint16_t*>(_outImage.m_ptr);
+
+      const uint32_t width          = m_outImageDesc.m_width;
+      const uint32_t height         = m_outImageDesc.m_height;
+      const uint32_t dstLineLength  = m_outImageDesc.m_lineLength;
+      const uint32_t srcToDstShift  = m_srcToDstShift;
+
+      uint32_t targetPointsPerRow;
+      uint32_t targetPointsCol;
+
+      assert(m_outImageDesc.m_height % 4 == 0); // verified in setup
+#pragma MUST_ITERATE(4, ,4)
+      for (uint32_t dstRow=0; dstRow < height; ++dstRow)
+      {
+//        uint16_t* restrict bitmapRow = reinterpret_cast<uint16_t*>(s_bitmap + (dstRow >> 2)*bitmapDesc.m_width);
+        uint16_t* restrict factormapRow = reinterpret_cast<uint16_t*>(s_factormap + (dstRow >> 2)*factormapDesc.m_width);
+
+        targetPointsPerRow = 0;
+        targetPointsCol = 0;
+//        assert(m_outImageDesc.m_width % 32 == 0); // verified in setup
+#pragma MUST_ITERATE(32, ,32)
+        for (uint32_t dstCol=0; dstCol < width; ++dstCol)
+        {
+          const uint64_t rgb888hsv = *rgb888hsvptr++;
+//          const uint16_t bitmap = *(bitmapRow + (dstCol >> 2));
+          const uint16_t factormap = *(factormapRow + (dstCol >> 2));
+
+          const bool det = (factormap < 0xFF);
+          targetPointsPerRow += det;
+          targetPointsCol += det?dstCol:0;
+          writeOutputPixel(dstImage++, det?0x00ffff:_hill(rgb888hsv));
+        }
+        m_targetX      += targetPointsCol;
+        m_targetY      += dstRow*targetPointsPerRow;
+        m_targetPoints += targetPointsPerRow;
+      }
+
       }
 
 #ifdef DEBUG_REPEAT

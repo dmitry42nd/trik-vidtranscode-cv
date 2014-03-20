@@ -1,5 +1,5 @@
-#ifndef TRIK_VIDTRANSCODE_CV_INTERNAL_CV_BITMAP_BUILDER_HPP_
-#define TRIK_VIDTRANSCODE_CV_INTERNAL_CV_BITMAP_BUILDER_HPP_
+#ifndef TRIK_VIDTRANSCODE_CV_INTERNAL_CV_CLASTERIZER_HPP_
+#define TRIK_VIDTRANSCODE_CV_INTERNAL_CV_CLASTERIZER_HPP_
 
 #ifndef __cplusplus
 #error C++-only header
@@ -17,7 +17,6 @@
 
 /* **** **** **** **** **** */ namespace cv /* **** **** **** **** **** */ {
 
-
 #if 0
 #define DEBUG_INLINE __attribute__((noinline))
 #else
@@ -32,6 +31,6 @@
 
 // include one of implementations
 //#include "internal/cv_bitmap_bulder_seqpass.hpp"
-#include "internal/cv_bitmap_builder_reference.hpp"
+#include "internal/cv_clasterizer_reference.hpp"
 
-#endif // !TRIK_VIDTRANSCODE_CV_INTERNAL_CV_BITMAP_BUILDER_HPP_
+#endif // !TRIK_VIDTRANSCODE_CV_INTERNAL_CV_CLASTERIZER_HPP_

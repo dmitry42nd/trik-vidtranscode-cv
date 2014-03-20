@@ -44,6 +44,18 @@ inline _T range(_T _min, _T _val, _T _max)
 }
 
 
+//Counting the number of non-zero bits in uint16_t variable
+inline uint16_t pop(uint16_t x) 
+{
+  x = x - ((x >> 1) & 0x5555);
+  x = (x & 0x3333) + ((x >> 2) & 0x3333);
+  x = (x + (x >> 4)) & 0x0f0f;
+  x = x + (x >> 8);
+  x = x + (x >> 16);
+
+  return x & 0x003f;
+}
+
 } /* **** **** **** **** **** * namespace trik * **** **** **** **** **** */
 
 
