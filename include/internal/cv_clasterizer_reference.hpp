@@ -8,7 +8,6 @@
 #include <cassert>
 #include <cmath>
 #include <vector>
-#include <map>
 
 #include "internal/stdcpp.hpp"
 #include "trik_vidtranscode_cv.h"
@@ -30,6 +29,7 @@ class Clasterizer : public CVAlgorithm
 
     std::vector<uint16_t> equalClasters;
     std::vector<uint16_t> directEqualClasters;
+    std::vector<uint16_t> clastersMass;
 
     uint16_t m_currentMaxClasterNum;
 
@@ -46,13 +46,13 @@ class Clasterizer : public CVAlgorithm
     }
 
 
-    uint16_t min(uint16_t** a)
+    uint16_t min(uint16_t** envPixs)
     {
       uint16_t min = NO_CLASTER;
 
       #pragma MUST_ITERATE(4,,4)
       for(int i = 0; i < ENV_PIXS_NUM; i++)
-          min = *(a[i]) < min ? *(a[i]) : min;
+          min = *(envPixs[i]) < min ? *(envPixs[i]) : min;
 
         return min;
     }
@@ -147,7 +147,7 @@ class Clasterizer : public CVAlgorithm
     {
         directEqualClasters.resize(equalClasters.size());
 
-        for(uint16_t c = 1; c < equalClasters.size(); a++)
+        for(uint16_t c = 1; c < equalClasters.size(); c++)
         {
             if (c != equalClasters[c])
             {
@@ -159,13 +159,13 @@ class Clasterizer : public CVAlgorithm
                     min = tmp < min ? tmp : min;
                     tmp = equalClasters[tmp];
                 }
-                while(a != tmp);
+                while(c != tmp);
 
                 directEqualClasters[c] = min;
             }
             else
             {
-                directEqualClasters[c] = a;
+                directEqualClasters[c] = c;
             }
         }
     }
@@ -177,14 +177,15 @@ class Clasterizer : public CVAlgorithm
       return a == NO_CLASTER ? NO_CLASTER : directEqualClasters[a];
     }
 
+    uint16_t getClastersAmount()
+    {
+      return equalClasters.size();
+    }
+
     virtual bool setup(const TrikCvImageDesc& _inImageDesc, const TrikCvImageDesc& _outImageDesc, int8_t* _fastRam, size_t _fastRamSize)
     {
       m_inImageDesc  = _inImageDesc;
       m_outImageDesc = _outImageDesc;
-
-      m_currentMaxClasterNum = 1;
-      equalClasters.resize(1);
-      directEqualClasters.resize(1);
 
       if (   m_inImageDesc.m_width < 0
           || m_inImageDesc.m_height < 0
@@ -206,6 +207,7 @@ class Clasterizer : public CVAlgorithm
 
       m_currentMaxClasterNum = 1;
       equalClasters.resize(1);
+      directEqualClasters.resize(1);
 
 #ifdef DEBUG_REPEAT
       for (unsigned repeat = 0; repeat < DEBUG_REPEAT; ++repeat) {

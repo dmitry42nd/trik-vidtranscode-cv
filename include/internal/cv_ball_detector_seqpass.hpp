@@ -8,7 +8,8 @@
 #include <cassert>
 #include <cmath>
 #include <c6x.h>
-//#include <map>
+#include <map>
+#include <algorithm>
 
 #include "internal/stdcpp.hpp"
 #include "trik_vidtranscode_cv.h"
@@ -35,6 +36,7 @@ class BallDetector<TRIK_VIDTRANSCODE_CV_VIDEO_FORMAT_YUV422, TRIK_VIDTRANSCODE_C
 {
   private:
     static const int m_detectZoneScale = 6;
+    static const int OBJECTS_NUM = 4;
 
     uint64_t m_detectRange;
     uint32_t m_detectExpected;
@@ -43,6 +45,18 @@ class BallDetector<TRIK_VIDTRANSCODE_CV_VIDEO_FORMAT_YUV422, TRIK_VIDTRANSCODE_C
     int32_t  m_targetX;
     int32_t  m_targetY;
     uint32_t m_targetPoints;
+
+
+    uint16_t m_clastersAmount;
+    std::vector<int32_t>  m_targetXs;
+    std::vector<int32_t>  m_targetYs;
+    std::vector<uint32_t> m_targetPointss;
+
+/*
+    std::map<uint16_t, int32_t>  m_targetXs;
+    std::map<uint16_t, int32_t>  m_targetYs;
+    std::map<uint16_t, uint32_t> m_targetPointss;
+*/
 
     BitmapBuilder m_bitmapBuilder;
     Clasterizer   m_clasterizer;
@@ -58,6 +72,14 @@ class BallDetector<TRIK_VIDTRANSCODE_CV_VIDEO_FORMAT_YUV422, TRIK_VIDTRANSCODE_C
 
     static uint16_t* restrict s_mult43_div;  // allocated from fast ram
     static uint16_t* restrict s_mult255_div; // allocated from fast ram
+
+    template <typename T1, typename T2>
+    struct greater_second {
+        typedef std::pair<T1, T2> type;
+        bool operator ()(type const& a, type const& b) const {
+            return a.second > b.second;
+        }
+    };
 
     static void __attribute__((always_inline)) writeOutputPixel(uint16_t* restrict _rgb565ptr,
                                                                 const uint32_t _rgb888)
@@ -365,6 +387,23 @@ void clasterizeImage()
       return x & 0x003f;
     }
 
+    uint16_t max(std::vector<uint32_t> tgtPointss)
+    {
+      uint16_t max = 0;
+      uint16_t maxId = 0;
+
+      for(int i = 0; i < tgtPointss.size(); i++)
+      {
+        if(tgtPointss[i] > max)
+        {
+          max = tgtPointss[i];
+          maxId = i;
+        }
+      }
+
+      return maxId;
+    }
+
 
   public:
     virtual bool setup(const TrikCvImageDesc& _inImageDesc,
@@ -405,6 +444,16 @@ void clasterizeImage()
         }
       }
 
+      colors.resize(9);
+      colors[1] = 0x0000ff;
+      colors[2] = 0x00ff00;
+      colors[3] = 0x00ffff;
+      colors[4] = 0xff0000;
+      colors[5] = 0xff00ff;
+      colors[6] = 0xffff00;
+      colors[7] = 0xffffff;
+      colors[8] = 0x000000;
+
       inRgb888HsvImgDesc.m_width = 320;
       inRgb888HsvImgDesc.m_height = 240;
       inRgb888HsvImgDesc.m_lineLength = 320*sizeof(uint64_t);
@@ -415,12 +464,10 @@ void clasterizeImage()
       bitmapDesc.m_lineLength = (320/4)*sizeof(uint16_t);
       bitmapDesc.m_format = TRIK_VIDTRANSCODE_CV_VIDEO_FORMAT_METABITMAP;
 
-
       clastermapDesc.m_width = 320/4;
       clastermapDesc.m_height = 240/4;
       clastermapDesc.m_lineLength = 320/4;
       clastermapDesc.m_format = TRIK_VIDTRANSCODE_CV_VIDEO_FORMAT_METABITMAP;
-
 
       m_bitmapBuilder.setup(inRgb888HsvImgDesc, bitmapDesc, _fastRam, _fastRamSize);
       m_clasterizer.setup(bitmapDesc, clastermapDesc, _fastRam, _fastRamSize);
@@ -442,21 +489,14 @@ void clasterizeImage()
       memset(s_clastermap, 0xff, 640*480*2);
       memset(s_bitmap, 0x00, 640*480*2);
 
+/*
+      memset(m_targetXs, 0, OBJECTS_NUM*sizeof(int32_t))      ;
+      memset(m_targetYs, 0, OBJECTS_NUM*sizeof(int32_t))      ;
+      memset(m_targetPointss, 0, OBJECTS_NUM*sizeof(uint32_t))      ;
+*/
       m_targetX = 0;
       m_targetY = 0;
       m_targetPoints = 0;
-
-      colors.resize(9);
-      colors[1] = 0x0000ff;
-      colors[2] = 0x00ff00;
-      colors[3] = 0x00ffff;
-      colors[4] = 0xff0000;
-      colors[5] = 0xff00ff;
-      colors[6] = 0xffff00;
-      colors[7] = 0xffffff;
-      colors[8] = 0x000000;
-
-
 
 #ifdef DEBUG_REPEAT
       for (unsigned repeat = 0; repeat < DEBUG_REPEAT; ++repeat) {
@@ -490,41 +530,52 @@ void clasterizeImage()
         m_bitmapBuilder.run(inRgb888HsvImg, bitmap, _inArgs, _outArgs);
         m_clasterizer.run(bitmap, clastermap, _inArgs, _outArgs);
 
+        uint16_t clastersAmount = m_clasterizer.getClastersAmount();
 
-      const uint64_t* restrict rgb888hsvptr = s_rgb888hsv;
-      uint16_t* restrict dstImage = reinterpret_cast<uint16_t*>(_outImage.m_ptr);
+        m_targetXs.resize(clastersAmount);
+        m_targetYs.resize(clastersAmount);
+        m_targetPointss.resize(clastersAmount);
 
-      const uint32_t width          = m_outImageDesc.m_width;
-      const uint32_t height         = m_outImageDesc.m_height;
-      const uint32_t dstLineLength  = m_outImageDesc.m_lineLength;
-      const uint32_t srcToDstShift  = m_srcToDstShift;
+        const uint64_t* restrict rgb888hsvptr = s_rgb888hsv;
+        uint16_t* restrict dstImage = reinterpret_cast<uint16_t*>(_outImage.m_ptr);
 
-      uint32_t targetPointsPerRow;
-      uint32_t targetPointsCol;
+        const uint32_t width          = m_outImageDesc.m_width;
+        const uint32_t height         = m_outImageDesc.m_height;
+        const uint32_t dstLineLength  = m_outImageDesc.m_lineLength;
+        const uint32_t srcToDstShift  = m_srcToDstShift;
 
-      assert(m_outImageDesc.m_height % 4 == 0); // verified in setup
-#pragma MUST_ITERATE(4, ,4)
-      for (uint32_t dstRow=0; dstRow < height; ++dstRow)
-      {
-        uint16_t* restrict clastermapRow = reinterpret_cast<uint16_t*>(s_clastermap + (dstRow >> 2)*clastermapDesc.m_width);
+        uint32_t targetPointsPerRow;
+        uint32_t targetPointsCol;
 
-        targetPointsPerRow = 0;
-        targetPointsCol = 0;
-#pragma MUST_ITERATE(32, ,32)
-        for (uint32_t dstCol=0; dstCol < width; ++dstCol)
+        assert(m_outImageDesc.m_height % 4 == 0); // verified in setup
+  #pragma MUST_ITERATE(4, ,4)
+        for (uint32_t dstRow=0; dstRow < height; ++dstRow)
         {
-          const uint64_t rgb888hsv = *rgb888hsvptr++;
-          const uint16_t clastermap = *(clastermapRow + (dstCol >> 2));
+          uint16_t* restrict clastermapRow = reinterpret_cast<uint16_t*>(s_clastermap + (dstRow >> 2)*clastermapDesc.m_width);
 
-          const bool det = (m_clasterizer.getMinEqClaster(clastermap) < 0xFFFF);
-          targetPointsPerRow += det;
-          targetPointsCol += det?dstCol:0;
-          writeOutputPixel(dstImage++, det?colors[m_clasterizer.getMinEqClaster(clastermap)]:_hill(rgb888hsv));
+          targetPointsPerRow = 0;
+          targetPointsCol = 0;
+  #pragma MUST_ITERATE(32, ,32)
+          for (uint32_t dstCol=0; dstCol < width; ++dstCol)
+          {
+            const uint64_t rgb888hsv = *rgb888hsvptr++;
+            const uint16_t clastermap = *(clastermapRow + (dstCol >> 2));
+
+            uint16_t clasterNum = m_clasterizer.getMinEqClaster(clastermap);
+            const bool det = (clasterNum < 0xFFFF);
+            targetPointsPerRow += det;
+            targetPointsCol += det?dstCol:0;
+
+            m_targetPointss[clasterNum] += det;
+            m_targetXs[clasterNum] += det?dstCol:0;
+            m_targetYs[clasterNum] += dstRow*targetPointsPerRow;
+
+            writeOutputPixel(dstImage++, det?colors[clasterNum]:_hill(rgb888hsv));
+          }
+          m_targetX      += targetPointsCol;
+          m_targetY      += dstRow*targetPointsPerRow;
+          m_targetPoints += targetPointsPerRow;
         }
-        m_targetX      += targetPointsCol;
-        m_targetY      += dstRow*targetPointsPerRow;
-        m_targetPoints += targetPointsPerRow;
-      }
 
       }
 
@@ -549,17 +600,27 @@ void clasterizeImage()
 
       if (m_targetPoints > 0)
       {
-        const int32_t targetX = m_targetX/m_targetPoints;
-        const int32_t targetY = m_targetY/m_targetPoints;
+      
+        for(int i = 0; i < OBJECTS_NUM; i++)      
+        {
+          int j = max(m_targetPointss);
+          if(m_targetPointss[j] > 0)
+          {
+            const int32_t targetX = m_targetXs[j]/m_targetPointss[j];
+            const int32_t targetY = m_targetYs[j]/m_targetPointss[j];
 
-        assert(m_inImageDesc.m_height > 0 && m_inImageDesc.m_width > 0); // more or less safe since no target points would be detected otherwise
-        const uint32_t targetRadius = std::ceil(std::sqrt(static_cast<float>(m_targetPoints) / 3.1415927f));
+            assert(m_inImageDesc.m_height > 0 && m_inImageDesc.m_width > 0); // more or less safe since no target points would be detected otherwise
+            const uint32_t targetRadius = std::ceil(std::sqrt(static_cast<float>(m_targetPointss[j]) / 3.1415927f));
 
-        drawOutputCircle(targetX, targetY, targetRadius, _outImage, 0xffff00);
-
+            drawOutputCircle(targetX, targetY, 2, _outImage, 0xffff00);
+            m_targetPointss[j] = 0;
+          }
+/*
         _outArgs.targetX = ((targetX - static_cast<int32_t>(m_inImageDesc.m_width) /2) * 100*2) / static_cast<int32_t>(m_inImageDesc.m_width);
         _outArgs.targetY = ((targetY - static_cast<int32_t>(m_inImageDesc.m_height)/2) * 100*2) / static_cast<int32_t>(m_inImageDesc.m_height);
         _outArgs.targetSize = static_cast<uint32_t>(targetRadius*100*4) / static_cast<uint32_t>(m_inImageDesc.m_width + m_inImageDesc.m_height);
+*/
+        }
       }
       else
       {
