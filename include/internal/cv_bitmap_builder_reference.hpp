@@ -21,7 +21,7 @@
 class BitmapBuilder : public CVAlgorithm
 {
   private:
-    static const int m_metaPixelSize = 4;
+    static const int METAPIX_SIZE = 4;
 
     uint64_t m_detectRange;
     uint32_t m_detectExpected;
@@ -114,22 +114,24 @@ class BitmapBuilder : public CVAlgorithm
       for (unsigned repeat = 0; repeat < DEBUG_REPEAT; ++repeat) {
 #endif
 
-      for (TrikCvImageDimension srcRow = 0; srcRow < m_inImageDesc.m_height; srcRow++) //r = 0
+      for (TrikCvImageDimension srcRow = 0; srcRow < m_inImageDesc.m_height; srcRow++)
       {
         const TrikCvImageSize srcRowOffset = srcRow * m_inImageDesc.m_lineLength;
         uint64_t* restrict srcImgPtr = reinterpret_cast<uint64_t*>(_inImage.m_ptr + srcRowOffset);
 
-        const TrikCvImageSize dstRowOffset = (srcRow / m_metaPixelSize) * m_outImageDesc.m_lineLength;
+
+        const TrikCvImageSize dstRow = (srcRow / METAPIX_SIZE);
+        const TrikCvImageSize dstRowOffset = dstRow * m_outImageDesc.m_lineLength;
         XDAS_UInt16* restrict dstImgPtr = reinterpret_cast<XDAS_UInt16*>(_outImage.m_ptr + dstRowOffset);
 
-        const int metaPixelRowOffset = (srcRow%m_metaPixelSize)*m_metaPixelSize;
+        const int metaPixelRowOffset = (srcRow%METAPIX_SIZE)*METAPIX_SIZE;
 
         for (TrikCvImageDimension dstCol = 0; dstCol < m_outImageDesc.m_width; dstCol++)
         {
           int metaPixelPos = metaPixelRowOffset;
 
           #pragma MUST_ITERATE(4, ,4)
-          for (TrikCvImageDimension metaPixelCol = 0; metaPixelCol < m_metaPixelSize; metaPixelCol++)
+          for (TrikCvImageDimension metaPixelCol = 0; metaPixelCol < METAPIX_SIZE; metaPixelCol++)
           {
             if(detectHsvPixel(_loll(*srcImgPtr++), u64_hsv_range, u32_hsv_expect))
               *dstImgPtr += 1u << metaPixelPos;

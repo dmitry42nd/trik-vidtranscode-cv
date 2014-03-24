@@ -8,6 +8,7 @@
 #include <cassert>
 #include <cmath>
 #include <c6x.h>
+//#include <map>
 
 #include "internal/stdcpp.hpp"
 #include "trik_vidtranscode_cv.h"
@@ -25,7 +26,7 @@
 #warning Eliminate global var
 static uint64_t s_rgb888hsv[640*480];
 static uint16_t s_bitmap[640*480];
-static uint16_t s_factormap[640*480];
+static uint16_t s_clastermap[640*480];
 
 
 
@@ -51,7 +52,9 @@ class BallDetector<TRIK_VIDTRANSCODE_CV_VIDEO_FORMAT_YUV422, TRIK_VIDTRANSCODE_C
 
     TrikCvImageDesc inRgb888HsvImgDesc;
     TrikCvImageDesc bitmapDesc;
-    TrikCvImageDesc factormapDesc;
+    TrikCvImageDesc clastermapDesc;
+
+    std::vector<uint32_t> colors;
 
     static uint16_t* restrict s_mult43_div;  // allocated from fast ram
     static uint16_t* restrict s_mult255_div; // allocated from fast ram
@@ -413,14 +416,14 @@ void clasterizeImage()
       bitmapDesc.m_format = TRIK_VIDTRANSCODE_CV_VIDEO_FORMAT_METABITMAP;
 
 
-      factormapDesc.m_width = 320/4;
-      factormapDesc.m_height = 240/4;
-      factormapDesc.m_lineLength = 320/4;
-      factormapDesc.m_format = TRIK_VIDTRANSCODE_CV_VIDEO_FORMAT_METABITMAP;
+      clastermapDesc.m_width = 320/4;
+      clastermapDesc.m_height = 240/4;
+      clastermapDesc.m_lineLength = 320/4;
+      clastermapDesc.m_format = TRIK_VIDTRANSCODE_CV_VIDEO_FORMAT_METABITMAP;
 
 
       m_bitmapBuilder.setup(inRgb888HsvImgDesc, bitmapDesc, _fastRam, _fastRamSize);
-      m_clasterizer.setup(bitmapDesc, factormapDesc, _fastRam, _fastRamSize);
+      m_clasterizer.setup(bitmapDesc, clastermapDesc, _fastRam, _fastRamSize);
 
       return true;
     }
@@ -436,21 +439,23 @@ void clasterizeImage()
 
       bool autoDetectHsv = static_cast<bool>(_inArgs.autoDetectHsv); // true or false
 
-//      memset(s_factormap, 1, 640*480*2);
-
-//      #pragma MUST_ITERATE(640*480,,640*480)
-      uint16_t* restrict p = s_factormap;
-      for (int i = 0; i < 640*480; i++)
-      {
-        *p = 0xffff;
-        p++;
-      }
-
-      memset(s_bitmap, 0, 640*480*2);
+      memset(s_clastermap, 0xff, 640*480*2);
+      memset(s_bitmap, 0x00, 640*480*2);
 
       m_targetX = 0;
       m_targetY = 0;
       m_targetPoints = 0;
+
+      colors.resize(9);
+      colors[1] = 0x0000ff;
+      colors[2] = 0x00ff00;
+      colors[3] = 0x00ffff;
+      colors[4] = 0xff0000;
+      colors[5] = 0xff00ff;
+      colors[6] = 0xffff00;
+      colors[7] = 0xffffff;
+      colors[8] = 0x000000;
+
 
 
 #ifdef DEBUG_REPEAT
@@ -478,12 +483,12 @@ void clasterizeImage()
         bitmap.m_ptr = reinterpret_cast<TrikCvImagePtr>(s_bitmap);
         bitmap.m_size = 640*480*2;
 
-        TrikCvImageBuffer factormap;
-        factormap.m_ptr = reinterpret_cast<TrikCvImagePtr>(s_factormap);
-        factormap.m_size = 640*480*2;
+        TrikCvImageBuffer clastermap;
+        clastermap.m_ptr = reinterpret_cast<TrikCvImagePtr>(s_clastermap);
+        clastermap.m_size = 640*480*2;
 
         m_bitmapBuilder.run(inRgb888HsvImg, bitmap, _inArgs, _outArgs);
-        m_clasterizer.run(bitmap, factormap, _inArgs, _outArgs);
+        m_clasterizer.run(bitmap, clastermap, _inArgs, _outArgs);
 
 
       const uint64_t* restrict rgb888hsvptr = s_rgb888hsv;
@@ -501,23 +506,20 @@ void clasterizeImage()
 #pragma MUST_ITERATE(4, ,4)
       for (uint32_t dstRow=0; dstRow < height; ++dstRow)
       {
-//        uint16_t* restrict bitmapRow = reinterpret_cast<uint16_t*>(s_bitmap + (dstRow >> 2)*bitmapDesc.m_width);
-        uint16_t* restrict factormapRow = reinterpret_cast<uint16_t*>(s_factormap + (dstRow >> 2)*factormapDesc.m_width);
+        uint16_t* restrict clastermapRow = reinterpret_cast<uint16_t*>(s_clastermap + (dstRow >> 2)*clastermapDesc.m_width);
 
         targetPointsPerRow = 0;
         targetPointsCol = 0;
-//        assert(m_outImageDesc.m_width % 32 == 0); // verified in setup
 #pragma MUST_ITERATE(32, ,32)
         for (uint32_t dstCol=0; dstCol < width; ++dstCol)
         {
           const uint64_t rgb888hsv = *rgb888hsvptr++;
-//          const uint16_t bitmap = *(bitmapRow + (dstCol >> 2));
-          const uint16_t factormap = *(factormapRow + (dstCol >> 2));
+          const uint16_t clastermap = *(clastermapRow + (dstCol >> 2));
 
-          const bool det = (factormap < 0xFFFF);
+          const bool det = (m_clasterizer.getMinEqClaster(clastermap) < 0xFFFF);
           targetPointsPerRow += det;
           targetPointsCol += det?dstCol:0;
-          writeOutputPixel(dstImage++, det?0x00ffff:_hill(rgb888hsv));
+          writeOutputPixel(dstImage++, det?colors[m_clasterizer.getMinEqClaster(clastermap)]:_hill(rgb888hsv));
         }
         m_targetX      += targetPointsCol;
         m_targetY      += dstRow*targetPointsPerRow;
