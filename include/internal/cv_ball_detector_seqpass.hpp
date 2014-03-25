@@ -47,11 +47,16 @@ class BallDetector<TRIK_VIDTRANSCODE_CV_VIDEO_FORMAT_YUV422, TRIK_VIDTRANSCODE_C
     uint32_t m_targetPoints;
 
 
+    std::vector<int32_t>  X1, X2;
+    std::vector<int32_t>  Y1, Y2;
+    std::vector<uint32_t> SIZE;
+
     uint16_t m_clastersAmount;
+/*
     std::vector<int32_t>  m_targetXs;
     std::vector<int32_t>  m_targetYs;
     std::vector<uint32_t> m_targetPointss;
-
+*/
 /*
     std::map<uint16_t, int32_t>  m_targetXs;
     std::map<uint16_t, int32_t>  m_targetYs;
@@ -150,6 +155,70 @@ class BallDetector<TRIK_VIDTRANSCODE_CV_VIDEO_FORMAT_YUV422, TRIK_VIDTRANSCODE_C
         drawOutputPixelBound(_srcCol-circleY, _srcRow-circleX, widthBot, widthTop, heightBot, heightTop, _outImage, _rgb888);
       }
     }
+
+
+    void __attribute__((always_inline)) drawOutputFatRectangle(const int32_t _x1,
+                                                            const int32_t _x2,
+                                                            const int32_t _y1,
+                                                            const int32_t _y2,
+                                                            const TrikCvImageBuffer& _outImage,
+                                                            const uint32_t _rgb888) const
+    {
+      const int32_t widthBot  = 0;
+      const int32_t widthTop  = m_inImageDesc.m_width-1;
+      const int32_t heightBot = 0;
+      const int32_t heightTop = m_inImageDesc.m_height-1;
+
+      for (int32_t c = _x1; c < _x2; c++)
+      {
+        drawOutputPixelBound(c, _y1-1, widthBot, widthTop, heightBot, heightTop, _outImage, _rgb888);
+        drawOutputPixelBound(c,   _y1, widthBot, widthTop, heightBot, heightTop, _outImage, _rgb888);
+        drawOutputPixelBound(c, _y1+1, widthBot, widthTop, heightBot, heightTop, _outImage, _rgb888);
+
+        drawOutputPixelBound(c, _y2-1, widthBot, widthTop, heightBot, heightTop, _outImage, _rgb888);
+        drawOutputPixelBound(c,   _y2, widthBot, widthTop, heightBot, heightTop, _outImage, _rgb888);
+        drawOutputPixelBound(c, _y2+1, widthBot, widthTop, heightBot, heightTop, _outImage, _rgb888);
+      }
+
+      for (int32_t r = _y1; r < _y2; r++)
+      {
+        drawOutputPixelBound(_x1-1, r, widthBot, widthTop, heightBot, heightTop, _outImage, _rgb888);
+        drawOutputPixelBound(_x1,   r, widthBot, widthTop, heightBot, heightTop, _outImage, _rgb888);
+        drawOutputPixelBound(_x1+1, r, widthBot, widthTop, heightBot, heightTop, _outImage, _rgb888);
+
+        drawOutputPixelBound(_x2-1, r, widthBot, widthTop, heightBot, heightTop, _outImage, _rgb888);
+        drawOutputPixelBound(_x2,   r, widthBot, widthTop, heightBot, heightTop, _outImage, _rgb888);
+        drawOutputPixelBound(_x2+1, r, widthBot, widthTop, heightBot, heightTop, _outImage, _rgb888);
+      }
+    }
+
+    void __attribute__((always_inline)) drawOutputRectangle(const int32_t _x1,
+                                                            const int32_t _x2,
+                                                            const int32_t _y1,
+                                                            const int32_t _y2,
+                                                            const TrikCvImageBuffer& _outImage,
+                                                            const uint32_t _rgb888) const
+    {
+      const int32_t widthBot  = 0;
+      const int32_t widthTop  = m_inImageDesc.m_width-1;
+      const int32_t heightBot = 0;
+      const int32_t heightTop = m_inImageDesc.m_height-1;
+
+      for (int32_t c = _x1; c < _x2; c++)
+      {
+        drawOutputPixelBound(c,   _y1, widthBot, widthTop, heightBot, heightTop, _outImage, _rgb888);
+
+        drawOutputPixelBound(c,   _y2, widthBot, widthTop, heightBot, heightTop, _outImage, _rgb888);
+      }
+
+      for (int32_t r = _y1; r < _y2; r++)
+      {
+        drawOutputPixelBound(_x1,   r, widthBot, widthTop, heightBot, heightTop, _outImage, _rgb888);
+
+        drawOutputPixelBound(_x2,   r, widthBot, widthTop, heightBot, heightTop, _outImage, _rgb888);
+      }
+    }
+
 
     void __attribute__((always_inline)) drawRgbTargetCenterLine(const int32_t _srcCol, 
                                                                 const int32_t _srcRow,
@@ -387,16 +456,16 @@ void clasterizeImage()
       return x & 0x003f;
     }
 
-    uint16_t max(std::vector<uint32_t> tgtPointss)
+    uint16_t max(std::vector<uint32_t> t)
     {
       uint16_t max = 0;
       uint16_t maxId = 0;
 
-      for(int i = 0; i < tgtPointss.size(); i++)
+      for(int i = 0; i < t.size(); i++)
       {
-        if(tgtPointss[i] > max)
+        if(t[i] > max)
         {
-          max = tgtPointss[i];
+          max = t[i];
           maxId = i;
         }
       }
@@ -494,9 +563,18 @@ void clasterizeImage()
       memset(m_targetYs, 0, OBJECTS_NUM*sizeof(int32_t))      ;
       memset(m_targetPointss, 0, OBJECTS_NUM*sizeof(uint32_t))      ;
 */
-      m_targetX = 0;
+
+/*  
+    m_targetX = 0;
       m_targetY = 0;
       m_targetPoints = 0;
+
+      X1 = m_outImageDesc.m_width;
+      X2 = 0;
+      Y1 = m_outImageDesc.m_height;
+      Y2 = 0;
+      SIZE = 0;
+*/
 
 #ifdef DEBUG_REPEAT
       for (unsigned repeat = 0; repeat < DEBUG_REPEAT; ++repeat) {
@@ -530,11 +608,19 @@ void clasterizeImage()
         m_bitmapBuilder.run(inRgb888HsvImg, bitmap, _inArgs, _outArgs);
         m_clasterizer.run(bitmap, clastermap, _inArgs, _outArgs);
 
-        uint16_t clastersAmount = m_clasterizer.getClastersAmount();
+        m_clastersAmount = m_clasterizer.getClastersAmount();
 
-        m_targetXs.resize(clastersAmount);
-        m_targetYs.resize(clastersAmount);
-        m_targetPointss.resize(clastersAmount);
+        X1.resize(m_clastersAmount);
+        X2.resize(m_clastersAmount);
+        Y1.resize(m_clastersAmount);
+        Y2.resize(m_clastersAmount);
+        SIZE.resize(m_clastersAmount);
+
+        std::fill(X1.begin(), X1.end(), m_outImageDesc.m_width);
+        std::fill(X2.begin(), X2.end(), 0);
+        std::fill(Y1.begin(), Y1.end(), m_outImageDesc.m_height);
+        std::fill(Y2.begin(), Y2.end(), 0);
+        std::fill(SIZE.begin(), SIZE.end(), 0);
 
         const uint64_t* restrict rgb888hsvptr = s_rgb888hsv;
         uint16_t* restrict dstImage = reinterpret_cast<uint16_t*>(_outImage.m_ptr);
@@ -564,16 +650,17 @@ void clasterizeImage()
             uint16_t clasterNum = m_clasterizer.getMinEqClaster(clastermap);
             const bool det = (clasterNum < 0xFFFF);
             targetPointsPerRow += det;
-            targetPointsCol += det?dstCol:0;
 
-            m_targetPointss[clasterNum] += det;
-            m_targetXs[clasterNum] += det?dstCol:0;
-            m_targetYs[clasterNum] += dstRow*targetPointsPerRow;
+            if(det)
+            {
+              X1[clasterNum] = X1[clasterNum] < dstCol ? X1[clasterNum] : dstCol;
+              X2[clasterNum] = X2[clasterNum] > dstCol ? X2[clasterNum] : dstCol;
+              Y1[clasterNum] = Y1[clasterNum] < dstRow ? Y1[clasterNum] : dstRow;
+              Y2[clasterNum] = Y2[clasterNum] > dstRow ? Y2[clasterNum] : dstRow;
+            }
 
-            writeOutputPixel(dstImage++, det?colors[clasterNum]:_hill(rgb888hsv));
+            writeOutputPixel(dstImage++, det?0x00ffff:_hill(rgb888hsv));
           }
-          m_targetX      += targetPointsCol;
-          m_targetY      += dstRow*targetPointsPerRow;
           m_targetPoints += targetPointsPerRow;
         }
 
@@ -598,28 +685,43 @@ void clasterizeImage()
       drawRgbTargetHorizontalCenterLine(hWidth, hHeight - 2*step, _outImage, 0xff00ff);
       drawRgbTargetHorizontalCenterLine(hWidth, hHeight + 2*step, _outImage, 0xff00ff);
 
+      const uint32_t totalSize = m_outImageDesc.m_height*m_outImageDesc.m_width;
+
+      for(int i = 0; i < m_clastersAmount; i++)
+      {
+        int32_t a = X2[i] - X1[i];
+        int32_t b = Y2[i] - Y1[i];
+        if(a > 0 && b > 0)
+          SIZE[i] = a*b;
+      }
+
+
       if (m_targetPoints > 0)
       {
-      
-        for(int i = 0; i < OBJECTS_NUM; i++)      
+            assert(m_inImageDesc.m_height > 0 && m_inImageDesc.m_width > 0); // more or less safe since no target points would be detected otherwise        
+        for(int i = 0; i < OBJECTS_NUM; i++)
         {
-          int j = max(m_targetPointss);
-          if(m_targetPointss[j] > 0)
-          {
-            const int32_t targetX = m_targetXs[j]/m_targetPointss[j];
-            const int32_t targetY = m_targetYs[j]/m_targetPointss[j];
+            int j = max(SIZE);
+            if(SIZE[j]>10)
+            {
+              const int32_t targetX = (X2[j] + X1[j])/2;
+              const int32_t targetY = (Y2[j] + Y1[j])/2;
 
-            assert(m_inImageDesc.m_height > 0 && m_inImageDesc.m_width > 0); // more or less safe since no target points would be detected otherwise
-            const uint32_t targetRadius = std::ceil(std::sqrt(static_cast<float>(m_targetPointss[j]) / 3.1415927f));
+              //const uint32_t targetRadius = std::ceil(std::sqrt(static_cast<float>(m_targetPointss[j]) / 3.1415927f));
 
-            drawOutputCircle(targetX, targetY, 2, _outImage, 0xffff00);
-            m_targetPointss[j] = 0;
-          }
-/*
-        _outArgs.targetX = ((targetX - static_cast<int32_t>(m_inImageDesc.m_width) /2) * 100*2) / static_cast<int32_t>(m_inImageDesc.m_width);
-        _outArgs.targetY = ((targetY - static_cast<int32_t>(m_inImageDesc.m_height)/2) * 100*2) / static_cast<int32_t>(m_inImageDesc.m_height);
-        _outArgs.targetSize = static_cast<uint32_t>(targetRadius*100*4) / static_cast<uint32_t>(m_inImageDesc.m_width + m_inImageDesc.m_height);
-*/
+              if(i == 0)
+              {
+                _outArgs.targetX = ((targetX - static_cast<int32_t>(m_inImageDesc.m_width) /2) * 100*2) / static_cast<int32_t>(m_inImageDesc.m_width);
+                _outArgs.targetY = ((targetY - static_cast<int32_t>(m_inImageDesc.m_height)/2) * 100*2) / static_cast<int32_t>(m_inImageDesc.m_height);
+                _outArgs.targetSize = static_cast<uint32_t>(std::ceil(std::sqrt(static_cast<float>(SIZE[j])))*100*4) / static_cast<uint32_t>(m_inImageDesc.m_width + m_inImageDesc.m_height);
+                drawOutputFatRectangle(X1[j], X2[j], Y1[j], Y2[j], _outImage, 0xffff00);
+              }
+              else
+                drawOutputRectangle(X1[j], X2[j], Y1[j], Y2[j], _outImage, 0xffff00);
+
+              SIZE[j] = 0;
+            }
+    
         }
       }
       else
