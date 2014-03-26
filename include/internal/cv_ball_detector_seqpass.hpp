@@ -30,13 +30,13 @@ static uint16_t s_bitmap[640*480];
 static uint16_t s_clastermap[640*480];
 
 
-
 template <>
 class BallDetector<TRIK_VIDTRANSCODE_CV_VIDEO_FORMAT_YUV422, TRIK_VIDTRANSCODE_CV_VIDEO_FORMAT_RGB565X> : public CVAlgorithm
 {
   private:
-    static const int m_detectZoneScale = 6;
     static const int OBJECTS_NUM = 4;
+
+    static const int m_detectZoneScale = 6;
 
     uint64_t m_detectRange;
     uint32_t m_detectExpected;
@@ -46,22 +46,10 @@ class BallDetector<TRIK_VIDTRANSCODE_CV_VIDEO_FORMAT_YUV422, TRIK_VIDTRANSCODE_C
     int32_t  m_targetY;
     uint32_t m_targetPoints;
 
-
+    uint16_t m_clastersAmount;
     std::vector<int32_t>  X1, X2;
     std::vector<int32_t>  Y1, Y2;
     std::vector<uint32_t> SIZE;
-
-    uint16_t m_clastersAmount;
-/*
-    std::vector<int32_t>  m_targetXs;
-    std::vector<int32_t>  m_targetYs;
-    std::vector<uint32_t> m_targetPointss;
-*/
-/*
-    std::map<uint16_t, int32_t>  m_targetXs;
-    std::map<uint16_t, int32_t>  m_targetYs;
-    std::map<uint16_t, uint32_t> m_targetPointss;
-*/
 
     BitmapBuilder m_bitmapBuilder;
     Clasterizer   m_clasterizer;
@@ -72,8 +60,6 @@ class BallDetector<TRIK_VIDTRANSCODE_CV_VIDEO_FORMAT_YUV422, TRIK_VIDTRANSCODE_C
     TrikCvImageDesc inRgb888HsvImgDesc;
     TrikCvImageDesc bitmapDesc;
     TrikCvImageDesc clastermapDesc;
-
-    std::vector<uint32_t> colors;
 
     static uint16_t* restrict s_mult43_div;  // allocated from fast ram
     static uint16_t* restrict s_mult255_div; // allocated from fast ram
@@ -444,18 +430,6 @@ void clasterizeImage()
     }
 
 
-
-    uint16_t pop(uint16_t x)
-    {
-      x = x - ((x >> 1) & 0x5555);
-      x = (x & 0x3333) + ((x >> 2) & 0x3333);
-      x = (x + (x >> 4)) & 0x0f0f;
-      x = x + (x >> 8);
-      x = x + (x >> 16);
-
-      return x & 0x003f;
-    }
-
     uint16_t max(std::vector<uint32_t> t)
     {
       uint16_t max = 0;
@@ -513,16 +487,6 @@ void clasterizeImage()
         }
       }
 
-      colors.resize(9);
-      colors[1] = 0x0000ff;
-      colors[2] = 0x00ff00;
-      colors[3] = 0x00ffff;
-      colors[4] = 0xff0000;
-      colors[5] = 0xff00ff;
-      colors[6] = 0xffff00;
-      colors[7] = 0xffffff;
-      colors[8] = 0x000000;
-
       inRgb888HsvImgDesc.m_width = 320;
       inRgb888HsvImgDesc.m_height = 240;
       inRgb888HsvImgDesc.m_lineLength = 320*sizeof(uint64_t);
@@ -558,24 +522,6 @@ void clasterizeImage()
       memset(s_clastermap, 0xff, 640*480*2);
       memset(s_bitmap, 0x00, 640*480*2);
 
-/*
-      memset(m_targetXs, 0, OBJECTS_NUM*sizeof(int32_t))      ;
-      memset(m_targetYs, 0, OBJECTS_NUM*sizeof(int32_t))      ;
-      memset(m_targetPointss, 0, OBJECTS_NUM*sizeof(uint32_t))      ;
-*/
-
-/*  
-    m_targetX = 0;
-      m_targetY = 0;
-      m_targetPoints = 0;
-
-      X1 = m_outImageDesc.m_width;
-      X2 = 0;
-      Y1 = m_outImageDesc.m_height;
-      Y2 = 0;
-      SIZE = 0;
-*/
-
 #ifdef DEBUG_REPEAT
       for (unsigned repeat = 0; repeat < DEBUG_REPEAT; ++repeat) {
 #endif
@@ -605,6 +551,7 @@ void clasterizeImage()
         clastermap.m_ptr = reinterpret_cast<TrikCvImagePtr>(s_clastermap);
         clastermap.m_size = 640*480*2;
 
+
         m_bitmapBuilder.run(inRgb888HsvImg, bitmap, _inArgs, _outArgs);
         m_clasterizer.run(bitmap, clastermap, _inArgs, _outArgs);
 
@@ -621,6 +568,7 @@ void clasterizeImage()
         std::fill(Y1.begin(), Y1.end(), m_outImageDesc.m_height);
         std::fill(Y2.begin(), Y2.end(), 0);
         std::fill(SIZE.begin(), SIZE.end(), 0);
+
 
         const uint64_t* restrict rgb888hsvptr = s_rgb888hsv;
         uint16_t* restrict dstImage = reinterpret_cast<uint16_t*>(_outImage.m_ptr);
@@ -685,6 +633,7 @@ void clasterizeImage()
       drawRgbTargetHorizontalCenterLine(hWidth, hHeight - 2*step, _outImage, 0xff00ff);
       drawRgbTargetHorizontalCenterLine(hWidth, hHeight + 2*step, _outImage, 0xff00ff);
 
+
       const uint32_t totalSize = m_outImageDesc.m_height*m_outImageDesc.m_width;
 
       for(int i = 0; i < m_clastersAmount; i++)
@@ -698,7 +647,7 @@ void clasterizeImage()
 
       if (m_targetPoints > 0)
       {
-            assert(m_inImageDesc.m_height > 0 && m_inImageDesc.m_width > 0); // more or less safe since no target points would be detected otherwise        
+        assert(m_inImageDesc.m_height > 0 && m_inImageDesc.m_width > 0); // more or less safe since no target points would be detected otherwise        
         for(int i = 0; i < OBJECTS_NUM; i++)
         {
             int j = max(SIZE);
@@ -706,8 +655,6 @@ void clasterizeImage()
             {
               const int32_t targetX = (X2[j] + X1[j])/2;
               const int32_t targetY = (Y2[j] + Y1[j])/2;
-
-              //const uint32_t targetRadius = std::ceil(std::sqrt(static_cast<float>(m_targetPointss[j]) / 3.1415927f));
 
               if(i == 0)
               {

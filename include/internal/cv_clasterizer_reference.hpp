@@ -215,19 +215,18 @@ class Clasterizer : public CVAlgorithm
 
       for (int dstRow = 0; dstRow < m_inImageDesc.m_height; dstRow++)
       {
-          const int dstRowOffset = dstRow*m_inImageDesc.m_lineLength;
-          uint16_t* restrict dstImgPtr = reinterpret_cast<uint16_t*>(_outImage.m_ptr + dstRowOffset);
-          uint16_t* restrict srcImgPtr = reinterpret_cast<uint16_t*>(_inImage.m_ptr + dstRowOffset);
+        const int dstRowOffset = dstRow*m_inImageDesc.m_lineLength;
+        uint16_t* restrict dstImgPtr = reinterpret_cast<uint16_t*>(_outImage.m_ptr + dstRowOffset);
+        uint16_t* restrict srcImgPtr = reinterpret_cast<uint16_t*>(_inImage.m_ptr + dstRowOffset);
 
-          for (int dstCol = 0; dstCol < m_inImageDesc.m_width; dstCol++)
-          {
-              if(pop(*srcImgPtr) > 3)
-              {
-                 setClasterNum(dstImgPtr, dstRow, dstCol);
-              }
-              srcImgPtr++;
-              dstImgPtr++;
-          }
+        for (int dstCol = 0; dstCol < m_inImageDesc.m_width; dstCol++)
+        {
+          if(pop(*srcImgPtr) > 3)
+            setClasterNum(dstImgPtr, dstRow, dstCol);
+
+          srcImgPtr++;
+          dstImgPtr++;
+        }
       }
 
       setMinEqClasters();
