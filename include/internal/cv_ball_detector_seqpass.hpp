@@ -30,6 +30,25 @@ class BallDetector<TRIK_VIDTRANSCODE_CV_VIDEO_FORMAT_YUV422, TRIK_VIDTRANSCODE_C
 {
   private:
     static const int m_detectZoneScale = 6;
+/*
+  m_detectZoneScale
+  The perpose of this variable is to set borders of auto color detector special zones.
+  Example:
+    Let's m_detectZoneScale is 6. 
+    Then "step" is m_width/6
+    It means that inside zone of color detector looks like square wiht bounds at (x_center +- step) and (y_center +- step).
+    Middle (neutral) zone has (x_center +- 2*step) and (y_center +- 2*step) bounds.
+
+    ----------------
+    |   neutral    |
+    |   --------   |
+    |   |inside|   |
+    |   | zone |   |
+    |   |      |   |
+    |   --------   |
+    |    zone      |
+    ----------------
+*/
 
     uint64_t m_detectRange;
     uint32_t m_detectExpected;
