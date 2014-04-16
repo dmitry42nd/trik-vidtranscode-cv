@@ -46,8 +46,7 @@ typedef struct TRIK_VIDTRANSCODE_CV_DynamicParams {
 
 
 typedef struct TRIK_VIDTRANSCODE_CV_InArgsAlg {
-    XDAS_Int32    inTreeColorEntry;
-    XDAS_Int32    inTreeColor;
+
 } TRIK_VIDTRANSCODE_CV_InArgsAlg;
 
 typedef struct TRIK_VIDTRANSCODE_CV_InArgs {
@@ -57,12 +56,7 @@ typedef struct TRIK_VIDTRANSCODE_CV_InArgs {
 
 
 typedef struct TRIK_VIDTRANSCODE_CV_OutArgsAlg {
-    XDAS_Int8		targetX;    // [-100..100]
-    XDAS_Int8		targetY;    // [-100..100]
-    XDAS_UInt8		targetSize; // [0..100]
-
-    XDAS_Int32    outTreeColorEntry;
-    XDAS_Int32    outTreeColor;
+    XDAS_Int32    outColor[9];
 } TRIK_VIDTRANSCODE_CV_OutArgsAlg;
 
 typedef struct TRIK_VIDTRANSCODE_CV_OutArgs {

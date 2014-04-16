@@ -22,12 +22,17 @@
 #warning Eliminate global var
 static uint64_t s_rgb888hsv[640*480];
 
+/*
 const int m = 256 / 4;    // partition of axis h in 128 parts
 const int n = 256 / 8;   // s in 32 parts
 const int k = 256 / 8;   // v in 32 parts
+*/
+const int m_hueClsters = 256 / 4;    // partition of axis h in 128 parts
+const int m_satClsters = 256 / 8;   // s in 32 parts
+const int m_valClsters = 256 / 8;   // v in 32 parts
 
 
-static int c_color[m][n][k]; // massiv of clusters 32x8x8
+static int c_color[m_hueClsters][m_satClsters][m_valClsters]; // massiv of clusters 32x8x8
 
 union U_Hsv8x3
 {
@@ -40,9 +45,10 @@ union U_Hsv8x3
     uint32_t whole;
 };
 
+/*
 int img_width  = 320;
 int img_height = 240;
-
+*/
 
 template <>
 class BallDetector<TRIK_VIDTRANSCODE_CV_VIDEO_FORMAT_YUV422, TRIK_VIDTRANSCODE_CV_VIDEO_FORMAT_RGB565X> : public CVAlgorithm
@@ -142,7 +148,7 @@ class BallDetector<TRIK_VIDTRANSCODE_CV_VIDEO_FORMAT_YUV422, TRIK_VIDTRANSCODE_C
       const int32_t heightBot = 0;
       const int32_t heightTop = m_inImageDesc.m_height-1;
 
-      for (int adj = 0; adj < 100; ++adj)
+      for (int adj = 0; adj < 120; ++adj)
       {
         drawOutputPixelBound(_srcCol  , _srcRow-adj, widthBot, widthTop, heightBot, heightTop, _outImage, _rgb888);
         drawOutputPixelBound(_srcCol  , _srcRow+adj, widthBot, widthTop, heightBot, heightTop, _outImage, _rgb888);
@@ -159,7 +165,7 @@ class BallDetector<TRIK_VIDTRANSCODE_CV_VIDEO_FORMAT_YUV422, TRIK_VIDTRANSCODE_C
       const int32_t heightBot = 0;
       const int32_t heightTop = m_inImageDesc.m_height-1;
 
-      for (int adj = 0; adj < 100; ++adj)
+      for (int adj = 0; adj < 160; ++adj)
       {
         drawOutputPixelBound(_srcCol-adj  , _srcRow, widthBot, widthTop, heightBot, heightTop, _outImage, _rgb888);
         drawOutputPixelBound(_srcCol+adj  , _srcRow, widthBot, widthTop, heightBot, heightTop, _outImage, _rgb888);
@@ -351,16 +357,16 @@ void clasterizeImage()
       }
     }
 
-    void __attribute__((always_inline)) fillImage(const TrikCvImageBuffer& _outImage, const uint32_t _rgb888)
+    void __attribute__((always_inline)) fillImage(uint16_t _row, uint16_t _col, const TrikCvImageBuffer& _outImage, const uint32_t _rgb888)
     {
       const int32_t widthBot  = 0;
       const int32_t widthTop  = m_inImageDesc.m_width-1;
       const int32_t heightBot = 0;
       const int32_t heightTop = m_inImageDesc.m_height-1;
 
-      for (int row = 0; row < 50; ++row)
+      for (int row = _row; row < _row + 20; ++row)
       {
-        for (int col = 0; col < 50; ++col)
+        for (int col = _col; col < _col + 20; ++col)
         {
           drawOutputPixelBound(col, row, widthBot, widthTop, heightBot, heightTop, _outImage, _rgb888);
         }
@@ -368,80 +374,61 @@ void clasterizeImage()
 
     }
 
-  uint32_t GetImgColor()
+  uint32_t __attribute__((always_inline)) GetImgColor(int rowStart,
+                                                      int rowFinish,
+                                                      int colStart,
+                                                      int colFinish, int &colorEntry)
   {
-      uint32_t rgb_result = 0;
-      const uint64_t* restrict img = s_rgb888hsv;
+    uint32_t rgbResult = 0;
+    const uint64_t* restrict img = s_rgb888hsv;
 
-      // values of hue, saturation and value are between 0 and 255
+    // values of hue, saturation and value are between 0 and 255
 
-      // hsv cube 256x256x256 -> many small clusters 32x8x8
-      int ch, cs, cv;
+    int ch, cs, cv;
+    memset(c_color, 0, sizeof(int)*m_hueClsters*m_satClsters*m_valClsters);
 
-      int row_start_position = 90;
-      int row_finish_position = 150;
-      int column_start_position = 130;
-      int column_finish_position = 190;
+    //fill out the massiv of clusters
+    U_Hsv8x3 pixel;
+    for(int row = rowStart; row < rowFinish; row++)
+      for(int column = colStart; column < colFinish; column++)
+      {
+        pixel.whole = _loll(img[row*m_outImageDesc.m_width + column]);
 
-      //fill out the massiv of clusters
-      U_Hsv8x3 pixel;
-      for(int row = row_start_position; row < row_finish_position; row++)
-          for(int column = column_start_position; column < column_finish_position; column++)
+        ch = pixel.parts.h / 4;
+        cs = pixel.parts.s / 8;
+        cv = pixel.parts.v / 8;
+
+        c_color[ch][cs][cv]++;
+      }
+
+    int ch_max = 0, cs_max = 0, cv_max = 0;
+    int maxColorEntry = 0;
+
+    // find cluster with max number of pixels
+    for(int i = 0; i < m_hueClsters; i++)
+      for(int j = 0; j < m_satClsters; j++)
+        for(int k = 0; k < m_valClsters; k++)
+        {
+          if(c_color[i][j][k] > maxColorEntry)
           {
-            pixel.whole = _loll(img[row*img_width + column]);
-
-            if(pixel.parts.h == 0) ch = 0;
-            else ch = pixel.parts.h / 4;
-
-            if(pixel.parts.s == 0) cs = 0;
-            else cs = pixel.parts.s / 8;
-
-            if(pixel.parts.v == 0) cv = 0;
-            else cv = pixel.parts.v / 8;
-
-            c_color[ch][cs][cv]++;
+            maxColorEntry = c_color[i][j][k];
+            ch_max = i;
+            cs_max = j;
+            cv_max = k;
           }
+        }
 
-      int ch_max = 0, cs_max = 0, cv_max = 0;
-      int max_number_of_pix = 0;
+    // return h, s and v as h_max, s_max and _max with values
+    // scaled to be between 0 and 255.
+    int hue = ch_max * 4;
+    int sat = cs_max * 8;
+    int val = cv_max * 8;
 
-      int i, j, l;
+    rgbResult = HSVtoRGB(hue, sat, val);
 
-      // find cluster with max number of pixels
-      for(i = 0; i < m; i++)
-          for(j = 0; j < n; j++)
-              for(l = 0; l < k; l++)
-              {
-                  if(c_color[i][j][l] > max_number_of_pix)
-                  {
-                      max_number_of_pix = c_color[i][j][l];
-                      ch_max = i;
-                      cs_max = j;
-                      cv_max = l;
-                  }
-              }
+    colorEntry = maxColorEntry;
 
-      // return h, s and v as h_max, s_max and _max with values
-      // scaled to be between 0 and 255.
-      int hue = ch_max * 4;
-      int sat = cs_max * 8;
-      int val = cv_max * 8;
-
-      rgb_result = HSVtoRGB(hue, sat, val);
-
-      return rgb_result;
-/*
-      *_color      = rgb_result;
-      *_colorEntry = max_number_of_pix;
-
-      int hue2 = ch_max2 * 4;
-      int sat2 = cs_max2 * 64;
-      int val2 = cv_max2 * 64;
-      int rgb_result2 = HSVtoRGB(hue2, sat2, val2);
-
-      *_color2      = rgb_result2;
-      *_colorEntry2 = max_number_of_pix2;
-*/
+    return rgbResult;
   }
 
   void getTrueSV(double& rV, double& rS, double _v, double _s)
@@ -471,15 +458,7 @@ void clasterizeImage()
 
   uint32_t HSVtoRGB(int H, int S, int V)
   {
-      // HSV contains values scaled as in the color wheel:
-      // that is, all from 0 to 255.
-
-      // for this code to work, Hue needs
-      // to be scaled from 0 to 360 (it is the angle of the selected
-      // point within the circle). Saturation and Value must be
-      // scaled to be between 0 and 1.
-
-      uint32_t rgb_result;
+      uint32_t rgbResult;
 
       double h;
       double s;
@@ -573,14 +552,14 @@ void clasterizeImage()
           }
       }
 
-      // return r, g and b as rgb_result with values scaled
+      // return r, g and b as rgbResult with values scaled
       // to be between 0 and 255.
       int ri = r*255;
       int gi = g*255;
       int bi = b*255;
-      rgb_result = ((int32_t)ri << 16) + ((int32_t)gi << 8) + ((int32_t)bi);
+      rgbResult = ((int32_t)ri << 16) + ((int32_t)gi << 8) + ((int32_t)bi);
 
-      return rgb_result;
+      return rgbResult;
   }
 
   public:
@@ -637,7 +616,6 @@ void clasterizeImage()
       m_targetX = 0;
       m_targetY = 0;
       m_targetPoints = 0;
-      memset(c_color, 0, sizeof(int)*m*n*k);
 
       uint32_t detectHueFrom = 0;//range<int32_t>(0, (static_cast<int32_t>(_inArgs.detectHueFrom) * 255) / 359, 255); // scaling 0..359 to 0..255
       uint32_t detectHueTo   = 0;//range<int32_t>(0, (static_cast<int32_t>(_inArgs.detectHueTo  ) * 255) / 359, 255); // scaling 0..359 to 0..255
@@ -646,8 +624,6 @@ void clasterizeImage()
       uint32_t detectValFrom = 0;//range<int32_t>(0, (static_cast<int32_t>(_inArgs.detectValFrom) * 255) / 100, 255); // scaling 0..100 to 0..255
       uint32_t detectValTo   = 0;//range<int32_t>(0, (static_cast<int32_t>(_inArgs.detectValTo  ) * 255) / 100, 255); // scaling 0..100 to 0..255
       bool     autoDetectHsv = false;//static_cast<bool>(_inArgs.autoDetectHsv); // true or false
-      uint32_t inTreeColor   = _inArgs.inTreeColor;
-      uint32_t inTreeColorEntry   = _inArgs.inTreeColorEntry;
 
       if (detectHueFrom <= detectHueTo)
       {
@@ -677,27 +653,42 @@ void clasterizeImage()
       } // repeat
 #endif
 
+/*
       //draw taget pointer
-      drawRgbTargetCenterLine(130, 120, _outImage, 0xff00ff);
-      drawRgbTargetCenterLine(190, 120, _outImage, 0xff00ff);
-      drawRgbTargetCenterLine(90,  120, _outImage, 0xff00ff);
-      drawRgbTargetCenterLine(230, 120, _outImage, 0xff00ff);
+      drawRgbTargetCenterLine(80, 120, _outImage, 0xff00ff);
+      drawRgbTargetCenterLine(160, 120, _outImage, 0xff00ff);
+      drawRgbTargetCenterLine(240,  120, _outImage, 0xff00ff);
 
-      drawRgbTargetHorizontalCenterLine(160, 90, _outImage, 0xff00ff);
-      drawRgbTargetHorizontalCenterLine(160, 150, _outImage, 0xff00ff);
-      drawRgbTargetHorizontalCenterLine(160, 50, _outImage, 0xff00ff);
-      drawRgbTargetHorizontalCenterLine(160, 190, _outImage, 0xff00ff);
+      drawRgbTargetHorizontalCenterLine(160, 80, _outImage, 0xff00ff);
+      drawRgbTargetHorizontalCenterLine(160, 160, _outImage, 0xff00ff);
+*/
 
-      uint32_t res_color = GetImgColor();
-      uint32_t res_colorEntry = 0;
+      int colStep = m_outImageDesc.m_width / 3;
+      int rowStep = m_outImageDesc.m_height / 3;
 
-      fillImage(_outImage, res_color);
+      uint32_t resColor = 0;
+      int colorEntry=0;
+      int colorClaster=0;
 
-      _outArgs.targetX = 0;
-      _outArgs.targetY = 0;
-      _outArgs.targetSize = 0;
-      _outArgs.outTreeColor = res_color;
-      _outArgs.outTreeColorEntry = res_colorEntry;
+      uint32_t maxResColor = 0;
+      int maxColorEntry = 0;
+      int maxColorClaster = 0;
+
+
+      int counter = 0;
+      for(int i = 0; i < 3;)
+      {
+        int rowStart = i*rowStep;
+        int rowFinish = (++i)*rowStep;
+        for(int j = 0; j < 3;)
+        {
+          int colStart = j*colStep;
+          int colFinish = (++j)*colStep;
+          resColor = GetImgColor(rowStart, rowFinish, colStart, colFinish, colorEntry);
+          fillImage(rowStart, colStart, _outImage, resColor);
+          _outArgs.outColor[counter++] = resColor;
+        }
+      }
 
       return true;
     }
@@ -706,8 +697,8 @@ void clasterizeImage()
 uint16_t* restrict BallDetector<TRIK_VIDTRANSCODE_CV_VIDEO_FORMAT_YUV422,
                                 TRIK_VIDTRANSCODE_CV_VIDEO_FORMAT_RGB565X>::s_mult43_div = NULL;
 uint16_t* restrict BallDetector<TRIK_VIDTRANSCODE_CV_VIDEO_FORMAT_YUV422,
-                                TRIK_VIDTRANSCODE_CV_VIDEO_FORMAT_RGB565X>::s_mult255_div = NULL;
 
+                                TRIK_VIDTRANSCODE_CV_VIDEO_FORMAT_RGB565X>::s_mult255_div = NULL;
 
 } /* **** **** **** **** **** * namespace cv * **** **** **** **** **** */
 
