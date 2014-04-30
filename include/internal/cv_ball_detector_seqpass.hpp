@@ -663,6 +663,10 @@ void clasterizeImage()
       drawRgbTargetHorizontalCenterLine(160, 160, _outImage, 0xff00ff);
 */
 
+/*
+      int m = _inArgs.m;
+      int n = _inArgs.n;
+*/
       int colStep = m_outImageDesc.m_width / 3;
       int rowStep = m_outImageDesc.m_height / 3;
 
