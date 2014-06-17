@@ -27,10 +27,14 @@ const int m = 256 / 4;    // partition of axis h in 128 parts
 const int n = 256 / 8;   // s in 32 parts
 const int k = 256 / 8;   // v in 32 parts
 */
-const int m_hueClsters = 256 / 4;    // partition of axis h in 128 parts
-const int m_satClsters = 256 / 8;   // s in 32 parts
-const int m_valClsters = 256 / 8;   // v in 32 parts
+const int m_hueClsters = 256 / 8;    // partition of axis h in 128 parts
+const int m_satClsters = 256 / 64;   // s in 32 parts
+const int m_valClsters = 256 / 64;   // v in 32 parts
 
+const int n = 4;
+const int m = 4;
+int colStep;
+int rowStep;
 
 static int c_color[m_hueClsters][m_satClsters][m_valClsters]; // massiv of clusters 32x8x8
 
@@ -394,9 +398,9 @@ void clasterizeImage()
       {
         pixel.whole = _loll(img[row*m_outImageDesc.m_width + column]);
 
-        ch = pixel.parts.h / 4;
-        cs = pixel.parts.s / 8;
-        cv = pixel.parts.v / 8;
+        ch = pixel.parts.h / 8;
+        cs = pixel.parts.s / 64;
+        cv = pixel.parts.v / 64;
 
         c_color[ch][cs][cv]++;
       }
@@ -420,9 +424,9 @@ void clasterizeImage()
 
     // return h, s and v as h_max, s_max and _max with values
     // scaled to be between 0 and 255.
-    int hue = ch_max * 4;
-    int sat = cs_max * 8;
-    int val = cv_max * 8;
+    int hue = ch_max * 8;
+    int sat = cs_max * 64;
+    int val = cv_max * 64;
 
     rgbResult = HSVtoRGB(hue, sat, val);
 
@@ -474,7 +478,8 @@ void clasterizeImage()
 
       s = S / 255.0f;//(double) S / 255.0f;
       v = V / 255.0f;//(double) V / 255.0f;
-      getTrueSV(v ,s, v ,s);
+
+      //getTrueSV(v ,s, v ,s);
       v = v < 0.2 ? 0 : v;
       s = s < 0.2 ? 0 : 1;
 
@@ -601,6 +606,9 @@ void clasterizeImage()
         }
       }
 
+      colStep = m_outImageDesc.m_width / n;
+      rowStep = m_outImageDesc.m_height / m;
+
       return true;
     }
 
@@ -653,23 +661,6 @@ void clasterizeImage()
       } // repeat
 #endif
 
-/*
-      //draw taget pointer
-      drawRgbTargetCenterLine(80, 120, _outImage, 0xff00ff);
-      drawRgbTargetCenterLine(160, 120, _outImage, 0xff00ff);
-      drawRgbTargetCenterLine(240,  120, _outImage, 0xff00ff);
-
-      drawRgbTargetHorizontalCenterLine(160, 80, _outImage, 0xff00ff);
-      drawRgbTargetHorizontalCenterLine(160, 160, _outImage, 0xff00ff);
-*/
-
-/*
-      int m = _inArgs.m;
-      int n = _inArgs.n;
-*/
-      int colStep = m_outImageDesc.m_width / 3;
-      int rowStep = m_outImageDesc.m_height / 3;
-
       uint32_t resColor = 0;
       int colorEntry=0;
       int colorClaster=0;
@@ -680,14 +671,14 @@ void clasterizeImage()
 
 
       int counter = 0;
-      for(int i = 0; i < 3;)
+      for(int i = 0; i < m;)
       {
-        int rowStart = i*rowStep;
-        int rowFinish = (++i)*rowStep;
-        for(int j = 0; j < 3;)
+        int rowStart = (i++)*rowStep;
+        int rowFinish = rowStart+rowStep;
+        for(int j = 0; j < n;)
         {
-          int colStart = j*colStep;
-          int colFinish = (++j)*colStep;
+          int colStart = (j++)*colStep;
+          int colFinish = colStart+colStep;
           resColor = GetImgColor(rowStart, rowFinish, colStart, colFinish, colorEntry);
           fillImage(rowStart, colStart, _outImage, resColor);
           _outArgs.outColor[counter++] = resColor;
