@@ -460,14 +460,14 @@ void clasterizeImage()
       const int hHeight = m_inImageDesc.m_height/2;
       const int hWidth = m_inImageDesc.m_width/2;
 
+      drawRgbTargetCenterLine(hWidth - 2*step,  hHeight, _outImage, 0xff00ff);
       drawRgbTargetCenterLine(hWidth - step, hHeight, _outImage, 0xff00ff);
       drawRgbTargetCenterLine(hWidth + step, hHeight, _outImage, 0xff00ff);
-      drawRgbTargetCenterLine(hWidth - 2*step,  hHeight, _outImage, 0xff00ff);
       drawRgbTargetCenterLine(hWidth + 2*step, hHeight, _outImage, 0xff00ff);
 
+      drawRgbTargetHorizontalCenterLine(hWidth, hHeight - 2*step, _outImage, 0xff00ff);
       drawRgbTargetHorizontalCenterLine(hWidth, hHeight - step, _outImage, 0xff00ff);
       drawRgbTargetHorizontalCenterLine(hWidth, hHeight + step, _outImage, 0xff00ff);
-      drawRgbTargetHorizontalCenterLine(hWidth, hHeight - 2*step, _outImage, 0xff00ff);
       drawRgbTargetHorizontalCenterLine(hWidth, hHeight + 2*step, _outImage, 0xff00ff);
 
       if (m_targetPoints > 0)
