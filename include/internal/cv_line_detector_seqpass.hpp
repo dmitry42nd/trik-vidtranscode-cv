@@ -342,10 +342,12 @@ class LineDetector<TRIK_VIDTRANSCODE_CV_VIDEO_FORMAT_YUV422, TRIK_VIDTRANSCODE_C
 
       m_inImageFirstRow = m_inImageDesc.m_height - m_inImageDesc.m_height/m_imageScaleCoeff;
 
-      uint32_t detectHueFrom = range<int32_t>(0, (static_cast<int32_t>(_inArgs.detectHueFrom) * 255) / 359, 255); // scaling 0..359 to 0..255
-      uint32_t detectHueTo   = range<int32_t>(0, (static_cast<int32_t>(_inArgs.detectHueTo  ) * 255) / 359, 255); // scaling 0..359 to 0..255
-      uint32_t detectSatFrom = range<int32_t>(0, (static_cast<int32_t>(_inArgs.detectSatFrom) * 255) / 100, 255); // scaling 0..100 to 0..255
-      uint32_t detectSatTo   = range<int32_t>(0, (static_cast<int32_t>(_inArgs.detectSatTo  ) * 255) / 100, 255); // scaling 0..100 to 0..255
+
+      uint32_t detectHueFrom = 0; //range<int32_t>(0, (static_cast<int32_t>(_inArgs.detectHueFrom) * 255) / 359, 255); // scaling 0..359 to 0..255
+      uint32_t detectHueTo   = 255; //range<int32_t>(0, (static_cast<int32_t>(_inArgs.detectHueTo  ) * 255) / 359, 255); // scaling 0..359 to 0..255
+      uint32_t detectSatFrom = 0; //range<int32_t>(0, (static_cast<int32_t>(_inArgs.detectSatFrom) * 255) / 100, 255); // scaling 0..100 to 0..255
+      uint32_t detectSatTo   = 255; //range<int32_t>(0, (static_cast<int32_t>(_inArgs.detectSatTo  ) * 255) / 100, 255); // scaling 0..100 to 0..255
+
       uint32_t detectValFrom = range<int32_t>(0, (static_cast<int32_t>(_inArgs.detectValFrom) * 255) / 100, 255); // scaling 0..100 to 0..255
       uint32_t detectValTo   = range<int32_t>(0, (static_cast<int32_t>(_inArgs.detectValTo  ) * 255) / 100, 255); // scaling 0..100 to 0..255
       bool     autoDetectHsv = static_cast<bool>(_inArgs.autoDetectHsv); // true or false
@@ -364,6 +366,10 @@ class LineDetector<TRIK_VIDTRANSCODE_CV_VIDEO_FORMAT_YUV422, TRIK_VIDTRANSCODE_C
         m_detectExpected = 0x1;
       }
 
+      XDAS_Int32 drawY = m_inImageFirstRow - m_inImageDesc.m_height/2 + m_inImageDesc.m_height/(2*m_imageScaleCoeff);
+      const int hWidth = m_inImageDesc.m_width/2;
+      const int step = 40;
+
 #ifdef DEBUG_REPEAT
       for (unsigned repeat = 0; repeat < DEBUG_REPEAT; ++repeat) {
 #endif
@@ -374,7 +380,7 @@ class LineDetector<TRIK_VIDTRANSCODE_CV_VIDEO_FORMAT_YUV422, TRIK_VIDTRANSCODE_C
 
         if (autoDetectHsv)
         {
-          HsvRangeDetector rangeDetector = HsvRangeDetector(m_inImageDesc.m_width, m_inImageDesc.m_height);
+          HsvRangeDetector rangeDetector = HsvRangeDetector(m_inImageDesc.m_width, m_inImageDesc.m_height, step);
           rangeDetector.detect(_outArgs.detectHue, _outArgs.detectHueTolerance,
                                _outArgs.detectSat, _outArgs.detectSatTolerance,
                                _outArgs.detectVal, _outArgs.detectValTolerance,
@@ -387,10 +393,6 @@ class LineDetector<TRIK_VIDTRANSCODE_CV_VIDEO_FORMAT_YUV422, TRIK_VIDTRANSCODE_C
 #ifdef DEBUG_REPEAT
       } // repeat
 #endif
-
-      XDAS_Int32 drawY = m_inImageFirstRow - m_inImageDesc.m_height/2 + m_inImageDesc.m_height/(2*m_imageScaleCoeff);
-      const int hWidth = m_inImageDesc.m_width/2;
-      const int step = 40;
 
       drawRgbThinLine(hWidth - step, drawY, _outImage, 0xff00ff);
       drawRgbThinLine(hWidth + step, drawY, _outImage, 0xff00ff);

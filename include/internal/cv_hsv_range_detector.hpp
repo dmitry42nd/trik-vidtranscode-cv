@@ -23,306 +23,298 @@
 
 #warning Eliminate global var too
 
+typedef struct ColorRange {
 /*
-//real clasters params
-static const int cstrs_max_num = 32; // 256/8
+  uint8_t h0;
+  uint8_t h1;
+  uint8_t s0;
+  uint8_t s1;
+*/
+  uint8_t v0;
+  uint8_t v1;
+} ColorRange;
+
+typedef struct Cluster {
+/*
+  uint8_t h;
+  uint8_t s;
+*/
+  uint8_t v;
+} Image;
+
+typedef struct Roi {
+  uint16_t left_p;
+  uint16_t left_n;
+/*
+  uint16_t top_p;
+  uint16_t top_n;
+*/
+  uint16_t right_p;
+  uint16_t right_n;
+/*
+  uint16_t bot_p;
+  uint16_t bot_n;
+*/
+} Roi;
+
+typedef struct ImageData {
+  uint16_t width;
+  uint16_t height;
+} ImageData;
+
+typedef union U_Hsv8x3 {
+  struct {
+    uint8_t h;
+    uint8_t s;
+    uint8_t v;
+    uint8_t none;
+  } parts;
+  uint32_t whole;
+} U_Hsv8x3;
+
+
+//real Clusters params
+/*
+static const int cstrs_max = 32; // 256/8
+static const int cstrs_max_ = 31; // 256/16
 static const int pos_shift = 3; // 8 == 2^3
 */
 
-//test clasters params
-static const int cstrs_max_num = 16; // 256/16
-static const int pos_shift = 4; // 16 == 2^4
+static const int cstrs_max = 256; // 256/1
+static const int cstrs_max_ = 255; // 
+static const int pos_shift = 0; // 1 == 2^0
 
-static int32_t s_hsv_clasters[cstrs_max_num][cstrs_max_num][cstrs_max_num];
+/*
+//test Clusters params
+static const int cstrs_max = 16; // 256/16
+static const int cstrs_max_ = 15; // 256/16
+static const int pos_shift = 4; // 16 == 2^4
+*/
+static int32_t s_hsvClusters[cstrs_max];
 
 class HsvRangeDetector
 {
   private:
-    
-    static const int imageScaleCoeff = 1;
-    int inImageStartRow;
-    int inImageOfset;
-//    static const int outImageOfset   = height/2;
+    ImageData m_image;
+    Roi       m_roi;
+    Cluster   m_maxFillCluster;
+    int32_t   m_maxFillClusterValue;
 
-    int width;
-    int height;
-    
-    //positive image part bounds
-    int pos_l;
-    int pos_r;
-    int pos_t;
-    int pos_b;
-
-    //negative image part bounds
-    int neg_l;
-    int neg_r;
-    int neg_t;
-    int neg_b;
     //penalty coeffs
-    static const int K0 = 4;
+    static const int K  = 200;
+    static const int K0 = 1;
     static const int K1 = 1; 
-    static const int K2 = 6; 
+    static const int K2 = 2; 
 
-    const double T_end = 0.0005;
-
-    const double e = 2.718281828;
+    const double T_end  = 0.0005;
     const double lambda = 0.76;
-
-    union U_Hsv8x3
+    const double e = 2.718281828;
+  
+    int do_getIncrement(int _val, int _min, int _max, double _base, double _t)
     {
-        struct {
-          uint8_t h;
-          uint8_t s;
-          uint8_t v;
-          uint8_t none;
-        } parts;
-        uint32_t whole;
-    };
+      assert(_min <= _max);
+      if(_min == _max)
+        return _min;
+      else {
+        int res = 0;
+        double alpha = rand()/static_cast<double>(RAND_MAX);
+        double degree = 2 * alpha - 1;
+        res = _val + ((pow(_base, degree) - 1) * _t)*static_cast<double>(_max - _min);
 
-    int getIncrement(int _val, int _min, int _max, double _t)
-    {
-        assert(_min <= _max);
-        if(_min == _max)
-        {
-            return _min;
-        }
+        if ((res < _min) || (res > _max))
+          return do_getIncrement(_val, _min, _max, _base, _t);
         else
-        {
-            int res = 0;
-            double base = 1 + 1/_t;
-            double alpha = rand()/static_cast<double>(RAND_MAX);
-            double degree = 2 * alpha - 1;
-
-            res = _val + ((pow(base, degree) - 1) * _t)*static_cast<double>(_max - _min);
-
-            if ((_min <= res) && (res < _max))
-                return res;
-            else
-                return getIncrement(_val, _min, _max, _t);
-        }
+          return res;
+      }
     }
 
-
-    int truncateHue(int _val)
+    ColorRange getIncrement(ColorRange _C, double _T)
     {
-        int res = _val % cstrs_max_num;
-        if (res < 0)
-            res += cstrs_max_num;
+
+
+      double base = 1 + 1/_T;
+      ColorRange newC = {
+/*
+        newC.h0 = do_getIncrement(_C.h0, 0, cstrs_max_, base, _T),
+        newC.h1 = do_getIncrement(_C.h1, 0, cstrs_max_, base, _T),
+        newC.s0 = do_getIncrement(_C.s0, 0, m_maxFillCluster.s, base, _T),
+        newC.s1 = do_getIncrement(_C.s1, m_maxFillCluster.s, cstrs_max_, base, _T),
+*/
+        newC.v0 = do_getIncrement(_C.v0, 0, cstrs_max_, base, _T),
+        newC.v1 = do_getIncrement(_C.v1, 0, cstrs_max_, base, _T),
+      };
+
+      return newC;
+    }
+
+    uint64_t F(ColorRange C)
+    {
+//      ColorRange* C = _C;
+      int64_t res = 0;
+
+      for(int v = C.v0; v <= C.v1; v++)
+        res += s_hsvClusters[v] != 0 ? s_hsvClusters[v] : -K0;
+/*
+      if (C.h0 <= C.h1)
+        for(int h = C.h0; h <= C.h1; h++)
+          for(int s = C.s0; s <= C.s1; s++)
+            for(int v = C.v0; v <= C.v1; v++)
+              res += s_hsvClusters[h][s][v] != 0 ? s_hsvClusters[h][s][v] : -K0;
+        else { // h1 > h2
+          for(int h = C.h0; h < cstrs_max; h++)
+            for(int s = C.s0; s <= C.s1; s++)
+              for(int v = C.v0; v <= C.v1; v++)
+                res += s_hsvClusters[h][s][v] != 0 ? s_hsvClusters[h][s][v] : -K0;
+          for(int h = 0; h <= C.h1; h++)
+            for(int s = C.s0; s <= C.s1; s++)
+              for(int v = C.v0; v <= C.v1; v++)
+                res += s_hsvClusters[h][s][v] != 0 ? s_hsvClusters[h][s][v] : -K0;
+        }
+*/
+
         return res;
     }
 
-    uint64_t m_foo(int h1, int h2, int s1, int s2, int v1, int v2)
+    void initImg(int _imgWidth, int _imgHeight, int _step) 
     {
-        int64_t res = 0;
-        int32_t val = 0;
+      m_image.width = _imgWidth;
+      m_image.height = _imgHeight;
 
-        if (h1 <= h2)
-        {
+      uint16_t hWidth  = _imgWidth/2;
 
-            for(int h_pos = h1; h_pos <= h2; h_pos++)
-            {
-                for(int s_pos = s1; s_pos <= s2; s_pos++)
-                {
-                    for(int v_pos = v1; v_pos <= v2; v_pos++)
-                    {
+      //ROI bounds
+      m_roi.left_p  = hWidth - _step;
+      m_roi.right_p = hWidth + _step;
+/*
+      m_roi.top_p   = 0;
+      m_roi.bot_p   = _imgHeight;
+*/
 
-                        val = s_hsv_clasters[h_pos][s_pos][v_pos];
-                        res += val != 0 ? val : -K0;
-                    }
-                }
-            }
-
-        }
-        else // h1 > h2
-        {
-            for(int h_pos = h1; h_pos < cstrs_max_num; h_pos++)
-            {
-                for(int s_pos = s1; s_pos <= s2; s_pos++)
-                {
-                    for(int v_pos = v1; v_pos <= v2; v_pos++)
-                    {
-                        val = s_hsv_clasters[h_pos][s_pos][v_pos];
-                        res += val != 0 ? val : -K0;
-                    }
-                }
-            }
-            for(int h_pos = 0; h_pos <= h2; h_pos++)
-            {
-                for(int s_pos = s1; s_pos <= s2; s_pos++)
-                {
-                    for(int v_pos = v1; v_pos <= v2; v_pos++)
-                    {
-                        val = s_hsv_clasters[h_pos][s_pos][v_pos];
-                        res += val != 0 ? val : -K0;
-                    }
-                }
-            }
-        }
-
-        return res;
-    }
+      //Ih bounds
+      m_roi.left_n  = m_roi.left_p - _step;
+      m_roi.right_n = m_roi.right_p + _step;
+/*
+      m_roi.top_n   = 0;
+      m_roi.bot_n   = _imgHeight;
+*/
+    } 
 
   public:
-    HsvRangeDetector(int _imgWidth, int _imgHeight/*, int _detectZoneScale*/)
+    HsvRangeDetector(int _imgWidth, int _imgHeight, int _detectZoneScale) 
     {
-      width = _imgWidth;
-      height = _imgHeight;
-
-      int hHeight = height/2;
-      int hWidth = width/2;
-      int step = 40; //height/_detectZoneScale //better
-
-      inImageStartRow = height - height/imageScaleCoeff;
-      inImageOfset    = inImageStartRow*width;
-
-      pos_l = hWidth - step;
-      pos_r = hWidth + step;
-      pos_t = 0;
-      pos_b = height;
-
-      //negative image part bounds
-      neg_l = hWidth - 2*step;
-      neg_r = hWidth + 2*step;
-      neg_t = 0;
-      neg_b = height;
+        initImg(_imgWidth, _imgHeight, _detectZoneScale);
     }
 
-
-    void detect(uint16_t& _h, uint16_t& _hTol, uint16_t& _s, uint16_t& _sTol, uint16_t& _v, uint16_t& _vTol, uint64_t* _rgb888hsv) 
+    void detect(uint16_t& _h, uint16_t& _hTol, 
+                uint16_t& _s, uint16_t& _sTol, 
+                uint16_t& _v, uint16_t& _vTol, uint64_t* _rgb888hsv) 
     {
     //initialize stuff
       srand(time(NULL));
-      const uint64_t* restrict img = _rgb888hsv + inImageOfset;
-      int h1;
-      int h2;
-      int s1;
-      int s2;
-      int v1;
-      int v2;
 
+      const uint64_t* restrict img = _rgb888hsv;
 
-    //initialize clasters
-      memset(s_hsv_clasters,0,cstrs_max_num*cstrs_max_num*cstrs_max_num*sizeof(int32_t));
+    //initialize Clusters
+      memset(s_hsvClusters, 0, cstrs_max*sizeof(int32_t));
 
-    //initialize variables for claster with highest occurrence
-      int h_max_pos = 0;
-      int s_max_pos = 0;
-      int v_max_pos = 0;
-      int max_value = 0;
+    //initialize variables for Cluster with highest occurrence
+    //m_maxFillCluster
+      m_maxFillClusterValue = 0;
 
-    //clasterize image
+    //Clusterize image
       U_Hsv8x3 pixel;
-      int h_pos = 0;
-      int s_pos = 0;
-      int v_pos = 0;
-      
-      for (int row = inImageStartRow; row < height; row++)
-      {
-        for (int col = 0; col < width; col++)
-        {
+      Cluster currCluster;
+
+      for (int row = 0; row < m_image.height; row++) {
+        for (int col = 0; col < m_image.width; col++) {
           pixel.whole = _loll(*(img)++);
-          h_pos = (pixel.parts.h >> pos_shift);
-          s_pos = (pixel.parts.s >> pos_shift);
-          v_pos = (pixel.parts.v >> pos_shift);
+/*
+          currCluster.h = (pixel.parts.h >> pos_shift);
+          currCluster.s = (pixel.parts.s >> pos_shift);
+*/
+          currCluster.v = (pixel.parts.v >> pos_shift);
 
           //positive part of image
-          if(pos_l < col && col < pos_r && pos_t < row && row < pos_b)
-          {
-            s_hsv_clasters[h_pos][s_pos][v_pos]+=K1;
+          if(m_roi.left_p  < col 
+          && m_roi.right_p > col) {
+            s_hsvClusters[currCluster.v] += K1;
 
-            //remember claster with highest positive occurrence
-            if (s_hsv_clasters[h_pos][s_pos][v_pos] > max_value)
-            {
-                max_value = s_hsv_clasters[h_pos][s_pos][v_pos];
-                h_max_pos = h_pos;
-                s_max_pos = s_pos;
-                v_max_pos = v_pos;
+            //remember Cluster with highest positive occurrence
+            if (s_hsvClusters[currCluster.v] > m_maxFillClusterValue) {
+              m_maxFillClusterValue = s_hsvClusters[currCluster.v];
+              m_maxFillCluster      = currCluster;
             }
-
           } //negative part of image
-          else if(neg_r < col || col < neg_l || neg_b < row || row < neg_t)
-          {
-            s_hsv_clasters[h_pos][s_pos][v_pos]-=K2;
+          else if(m_roi.left_n > col 
+          || m_roi.right_n     < col) {
+            s_hsvClusters[currCluster.v]-=K2;
           }
         }
       }
 
     //algorithm
-
+      ColorRange C;
+      ColorRange newC;
+      memset(&newC,0,sizeof(Cluster));
       //initial hsv range
-      h1 = h_max_pos;
-      h2 = h_max_pos;
-      s1 = s_max_pos;
-      s2 = s_max_pos;
-      v1 = v_max_pos;
-      v2 = v_max_pos;
+/*
+      C.h0 = 
+      C.h1 = m_maxFillCluster.h;
+      C.s0 =     
+      C.s1 = m_maxFillCluster.s;
+*/
+      C.v0 =
+      C.v1 = m_maxFillCluster.v;
 
-      int64_t L = m_foo(h1, h2, s1, s2, v1, v2);
-
+      int64_t L = F(C);
+      int64_t newL = 0;
       double T = 150;
 
-      int h1New;
-      int v1New;
-      int h2New;
-      int s1New;
-      int s2New;
-      int v2New;
-
-      while(/*Th > T_end || Ts > T_end || Tv > T_end*/ T > T_end)
-      {
+      while(T > T_end) {
 #pragma MUST_ITERATE(200, ,200)
-        for(int i = 0; i < 200; i++)
-        {
-          h1New = truncateHue(getIncrement(h1, 0, cstrs_max_num, T));
-          h2New = truncateHue(getIncrement(h2, 0, cstrs_max_num, T));
-          s1New = getIncrement(s1, 0, s_max_pos, T);
-          s2New = getIncrement(s2, s_max_pos, cstrs_max_num, T);
-          v1New = getIncrement(v1, 0, v_max_pos, T);
-          v2New = getIncrement(v2, v_max_pos, cstrs_max_num, T);
+        for(int i = 0; i < K; i++) {
+          newC = getIncrement(C, T);
+          newL = F(newC);
 
-          int64_t LNew = m_foo(h1New, h2New, s1New, s2New, v1New, v2New);
-
-          if(L < LNew || (rand()/(double)RAND_MAX) <= pow(e,-(L-LNew)/T))
-          {
-            h1 = h1New;
-            h2 = h2New;
-            s1 = s1New;
-            s2 = s2New;
-            v1 = v1New;
-            v2 = v2New;
-
-            L = LNew;
+          if(rand() <= pow(e,(newL-L)/T)*RAND_MAX) {
+            C = newC;
+            L = newL;
           }
         }
         T*=lambda;
       }
+/*
+      C.h0 = (C.h0 << pos_shift)*1.4f;
+      C.h1 = (((C.h1+1) << pos_shift) - 1)*1.4f;
 
-      h1 = (h1 << pos_shift)*1.4f;
-      h2 = (((h2+1) << pos_shift) - 1)*1.4f;
-
-      s1 = (s1 << pos_shift)*0.39f;
-      s2 = (((s2+1) << pos_shift) - 1)*0.39f;
-
-      v1 = (v1 << pos_shift)*0.39f;
-      v2 = (((v2+1) << pos_shift) - 1)*0.39f;
-
-      if (h1 <= h2) 
-      {
-        _h    = (h2 + h1) / 2;
-        _hTol = (h2 - h1) / 2;
+      C.s0 = (C.s0 << pos_shift)*0.39f;
+      C.s1 = (((C.s1+1) << pos_shift) - 1)*0.39f;
+*/
+      C.v0 = (C.v0 << pos_shift)*0.39f;
+      C.v1 = (((C.v1+1) << pos_shift) - 1)*0.39f;
+/*
+      if (C.h0 <= C.h1) {
+        _h    = (C.h1 + C.h0) / 2;
+        _hTol = (C.h1 - C.h0) / 2;
       }
-      else
-      {
-        float hue = (h2 - (360.0f - h1)) / 2;
-        float hueTolerance = (h2 + (360.0f - h1)) / 2;
+      else {
+        float hue = (C.h1 - (360.0f - C.h0)) / 2;
+        float hueTolerance = (C.h1 + (360.0f - C.h0)) / 2;
         _h = hue >= 0 ? hue : (hue + 360);
         _hTol = hueTolerance;
       }
 
-      _s = (s2 + s1) / 2;
-      _sTol = (s2 - s1) / 2;
-      _v = (v1 + v2) / 2;
-      _vTol = (v2 - v1) / 2;
+      _s = (C.s1 + C.s0) / 2;
+      _sTol = (C.s1 - C.s0) / 2;
+*/
+      _h = 0;
+      _hTol = 0;
+      _s = 0;
+      _sTol = 0;
+
+      _v = (C.v1 + C.v0) / 2;
+      _vTol = (C.v1 - C.v0) / 2;
+
     }
 
 };
