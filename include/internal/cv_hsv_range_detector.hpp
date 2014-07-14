@@ -73,23 +73,10 @@ typedef union U_Hsv8x3 {
 } U_Hsv8x3;
 
 
-//real Clusters params
-/*
-static const int cstrs_max = 32; // 256/8
-static const int cstrs_max_ = 31; // 256/16
-static const int pos_shift = 3; // 8 == 2^3
-*/
-
 static const int cstrs_max = 256; // 256/1
 static const int cstrs_max_ = 255; // 
 static const int pos_shift = 0; // 1 == 2^0
 
-/*
-//test Clusters params
-static const int cstrs_max = 16; // 256/16
-static const int cstrs_max_ = 15; // 256/16
-static const int pos_shift = 4; // 16 == 2^4
-*/
 static int32_t s_hsvClusters[cstrs_max];
 
 class HsvRangeDetector
