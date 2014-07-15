@@ -22,19 +22,13 @@
 #warning Eliminate global var
 static uint64_t s_rgb888hsv[640*480];
 
-/*
-const int m = 256 / 4;    // partition of axis h in 128 parts
-const int n = 256 / 8;   // s in 32 parts
-const int k = 256 / 8;   // v in 32 parts
-*/
-const int m_hueClsters = 256 / 8;    // partition of axis h in 128 parts
-const int m_satClsters = 256 / 64;   // s in 32 parts
-const int m_valClsters = 256 / 64;   // v in 32 parts
+const int m_hueScale = 8;    // partition of axis h in 64 parts
+const int m_satScale = 64;   // s in 4 parts
+const int m_valScale = 64;   // v in 4 parts
 
-const int n = 4;
-const int m = 4;
-int colStep;
-int rowStep;
+const int m_hueClsters = 256 / m_hueScale;    // partition of axis h in 64 parts
+const int m_satClsters = 256 / m_satScale;   // s in 4 parts
+const int m_valClsters = 256 / m_valScale;   // v in 4 parts
 
 static int c_color[m_hueClsters][m_satClsters][m_valClsters]; // massiv of clusters 32x8x8
 
@@ -49,22 +43,18 @@ union U_Hsv8x3
     uint32_t whole;
 };
 
-/*
-int img_width  = 320;
-int img_height = 240;
-*/
-
 template <>
 class BallDetector<TRIK_VIDTRANSCODE_CV_VIDEO_FORMAT_YUV422, TRIK_VIDTRANSCODE_CV_VIDEO_FORMAT_RGB565X> : public CVAlgorithm
 {
   private:
+    uint8_t m_widthM;
+    uint8_t m_heightN;
+    uint16_t m_widthStep;
+    uint16_t m_heightStep;
+
     uint64_t m_detectRange;
     uint32_t m_detectExpected;
     uint32_t m_srcToDstShift;
-
-    int32_t  m_targetX;
-    int32_t  m_targetY;
-    uint32_t m_targetPoints;
 
     TrikCvImageDesc m_inImageDesc;
     TrikCvImageDesc m_outImageDesc;
@@ -329,10 +319,6 @@ void clasterizeImage()
       const uint32_t height         = m_inImageDesc.m_height;
       const uint32_t dstLineLength  = m_outImageDesc.m_lineLength;
       const uint32_t srcToDstShift  = m_srcToDstShift;
-      const uint64_t u64_hsv_range  = m_detectRange;
-      const uint32_t u32_hsv_expect = m_detectExpected;
-      uint32_t targetPointsPerRow;
-      uint32_t targetPointsCol;
 
       assert(m_inImageDesc.m_height % 4 == 0); // verified in setup
 #pragma MUST_ITERATE(4, ,4)
@@ -341,96 +327,69 @@ void clasterizeImage()
         const uint32_t dstRow = srcRow >> srcToDstShift;
         uint16_t* restrict dstImageRow = reinterpret_cast<uint16_t*>(_outImage.m_ptr + dstRow*dstLineLength);
 
-        targetPointsPerRow = 0;
-        targetPointsCol = 0;
         assert(m_inImageDesc.m_width % 32 == 0); // verified in setup
 #pragma MUST_ITERATE(32, ,32)
         for (uint32_t srcCol=0; srcCol < width; ++srcCol)
         {
           const uint32_t dstCol    = srcCol >> srcToDstShift;
           const uint64_t rgb888hsv = *rgb888hsvptr++;
-
-          const bool det = detectHsvPixel(_loll(rgb888hsv), u64_hsv_range, u32_hsv_expect);
-          targetPointsPerRow += det;
-          targetPointsCol += det?srcCol:0;
-          writeOutputPixel(dstImageRow+dstCol, det?0x00ffff:_hill(rgb888hsv));
+          writeOutputPixel(dstImageRow+dstCol, _hill(rgb888hsv));
         }
-        m_targetX      += targetPointsCol;
-        m_targetY      += srcRow*targetPointsPerRow;
-        m_targetPoints += targetPointsPerRow;
       }
     }
 
     void __attribute__((always_inline)) fillImage(uint16_t _row, uint16_t _col, const TrikCvImageBuffer& _outImage, const uint32_t _rgb888)
     {
-      const int32_t widthBot  = 0;
-      const int32_t widthTop  = m_inImageDesc.m_width-1;
-      const int32_t heightBot = 0;
-      const int32_t heightTop = m_inImageDesc.m_height-1;
+      const uint16_t widthBot  = 0;
+      const uint16_t widthTop  = m_inImageDesc.m_width-1;
+      const uint16_t heightBot = 0;
+      const uint16_t heightTop = m_inImageDesc.m_height-1;
 
       for (int row = _row; row < _row + 20; ++row)
-      {
         for (int col = _col; col < _col + 20; ++col)
-        {
           drawOutputPixelBound(col, row, widthBot, widthTop, heightBot, heightTop, _outImage, _rgb888);
-        }
-      }
 
     }
 
-  uint32_t __attribute__((always_inline)) GetImgColor(int rowStart,
-                                                      int rowFinish,
-                                                      int colStart,
-                                                      int colFinish, int &colorEntry)
+  uint32_t __attribute__((always_inline)) GetImgColor(int _rowStart,
+                                                      int _widthStep,
+                                                      int _colStart,
+                                                      int _heightStep)
   {
     uint32_t rgbResult = 0;
     const uint64_t* restrict img = s_rgb888hsv;
 
-    // values of hue, saturation and value are between 0 and 255
-
     int ch, cs, cv;
     memset(c_color, 0, sizeof(int)*m_hueClsters*m_satClsters*m_valClsters);
-
-    //fill out the massiv of clusters
-    U_Hsv8x3 pixel;
-    for(int row = rowStart; row < rowFinish; row++)
-      for(int column = colStart; column < colFinish; column++)
-      {
-        pixel.whole = _loll(img[row*m_outImageDesc.m_width + column]);
-
-        ch = pixel.parts.h / 8;
-        cs = pixel.parts.s / 64;
-        cv = pixel.parts.v / 64;
-
-        c_color[ch][cs][cv]++;
-      }
 
     int ch_max = 0, cs_max = 0, cv_max = 0;
     int maxColorEntry = 0;
 
-    // find cluster with max number of pixels
-    for(int i = 0; i < m_hueClsters; i++)
-      for(int j = 0; j < m_satClsters; j++)
-        for(int k = 0; k < m_valClsters; k++)
-        {
-          if(c_color[i][j][k] > maxColorEntry)
-          {
-            maxColorEntry = c_color[i][j][k];
-            ch_max = i;
-            cs_max = j;
-            cv_max = k;
-          }
+    U_Hsv8x3 pixel;
+    for(int row = _rowStart; row < _rowStart + _widthStep; row++)
+      for(int column = _colStart; column < _colStart + _heightStep; column++) {
+        pixel.whole = _loll(img[row*m_outImageDesc.m_width + column]);
+
+        ch = pixel.parts.h / m_hueScale;
+        cs = pixel.parts.s / m_satScale;
+        cv = pixel.parts.v / m_valScale;
+
+        c_color[ch][cs][cv]++;
+        if(c_color[ch][cs][cv] > maxColorEntry) {
+          maxColorEntry = c_color[ch][cs][cv];
+          ch_max = ch;
+          cs_max = cs;
+          cv_max = cv;
         }
+      }
 
     // return h, s and v as h_max, s_max and _max with values
     // scaled to be between 0 and 255.
-    int hue = ch_max * 8;
-    int sat = cs_max * 64;
-    int val = cv_max * 64;
+    int hue = ch_max * m_hueScale;
+    int sat = cs_max * m_satScale;
+    int val = cv_max * m_valScale;
 
     rgbResult = HSVtoRGB(hue, sat, val);
-
-    colorEntry = maxColorEntry;
 
     return rgbResult;
   }
@@ -464,101 +423,33 @@ void clasterizeImage()
   {
       uint32_t rgbResult;
 
-      double h;
-      double s;
-      double v;
-
       double r = 0;
       double g = 0;
       double b = 0;
 
-      // Scale Hue to be between 0 and 360. Saturation
-      // and value scale to be between 0 and 1.
-      h = (double)((int)((double) H / 255.0f * 360.0f) % 360);
-
-      s = S / 255.0f;//(double) S / 255.0f;
-      v = V / 255.0f;//(double) V / 255.0f;
+      double h = H / 255.0f;
+      double s = S / 255.0f;
+      double v = V / 255.0f;
 
       //getTrueSV(v ,s, v ,s);
       v = v < 0.2 ? 0 : v;
       s = s < 0.2 ? 0 : 1;
 
-      if ( s == 0 )
-      {
-          // If s is 0, all colors are the same.
-          // This is some flavor of gray.
-          r = v;
-          g = v;
-          b = v;
-      }
-      else
-      {
-          double p;
-          double q;
-          double t;
+      int i = h*6;
+      double f = h*6-i;
+      double p = v * (1 - s);
+      double q = v * (1 - f * s);
+      double t = v * (1 - (1 - f) * s);
 
-          double fractionalSector;
-          int sectorNumber;
-          double sectorPos;
-
-          // The color wheel consists of 6 sectors.
-          // Figure out which sector you are in.
-          sectorPos = h / 60.0f;
-          sectorNumber = (int)(floor(sectorPos));
-
-          // get the fractional part of the sector.
-          // That is, how many degrees into the sector are you?
-          fractionalSector = sectorPos - sectorNumber;
-
-          // Calculate values for the three axis of the color.
-          p = v * (1 - s);
-          q = v * (1 - (s * fractionalSector));
-          t = v * (1 - (s * (1 - fractionalSector)));
-
-          // Assign the fractional colors to r, g, and b
-          // based on the sector the angle is in.
-          switch (sectorNumber)
-          {
-          case 0:
-             r = v;
-             g = t;
-             b = p;
-             break;
-
-          case 1:
-             r = q;
-             g = v;
-             b = p;
-             break;
-
-          case 2:
-             r = p;
-             g = v;
-             b = t;
-             break;
-
-          case 3:
-             r = p;
-             g = q;
-             b = v;
-             break;
-
-          case 4:
-             r = t;
-             g = p;
-             b = v;
-             break;
-
-          case 5:
-             r = v;
-             g = p;
-             b = q;
-             break;
-          }
+      switch(i % 6) {
+        case 0: r = v; g = t; b = p; break;
+        case 1: r = q; g = v; b = p; break;
+        case 2: r = p; g = v; b = t; break;
+        case 3: r = p; g = q; b = v; break;
+        case 4: r = t; g = p; b = v; break;
+        case 5: r = v; g = p; b = q; break;
       }
 
-      // return r, g and b as rgbResult with values scaled
-      // to be between 0 and 255.
       int ri = r*255;
       int gi = g*255;
       int bi = b*255;
@@ -606,9 +497,6 @@ void clasterizeImage()
         }
       }
 
-      colStep = m_outImageDesc.m_width / n;
-      rowStep = m_outImageDesc.m_height / m;
-
       return true;
     }
 
@@ -621,31 +509,10 @@ void clasterizeImage()
         return false;
       _outImage.m_size = m_outImageDesc.m_height * m_outImageDesc.m_lineLength;
 
-      m_targetX = 0;
-      m_targetY = 0;
-      m_targetPoints = 0;
-
-      uint32_t detectHueFrom = 0;//range<int32_t>(0, (static_cast<int32_t>(_inArgs.detectHueFrom) * 255) / 359, 255); // scaling 0..359 to 0..255
-      uint32_t detectHueTo   = 0;//range<int32_t>(0, (static_cast<int32_t>(_inArgs.detectHueTo  ) * 255) / 359, 255); // scaling 0..359 to 0..255
-      uint32_t detectSatFrom = 0;//range<int32_t>(0, (static_cast<int32_t>(_inArgs.detectSatFrom) * 255) / 100, 255); // scaling 0..100 to 0..255
-      uint32_t detectSatTo   = 0;//range<int32_t>(0, (static_cast<int32_t>(_inArgs.detectSatTo  ) * 255) / 100, 255); // scaling 0..100 to 0..255
-      uint32_t detectValFrom = 0;//range<int32_t>(0, (static_cast<int32_t>(_inArgs.detectValFrom) * 255) / 100, 255); // scaling 0..100 to 0..255
-      uint32_t detectValTo   = 0;//range<int32_t>(0, (static_cast<int32_t>(_inArgs.detectValTo  ) * 255) / 100, 255); // scaling 0..100 to 0..255
-      bool     autoDetectHsv = false;//static_cast<bool>(_inArgs.autoDetectHsv); // true or false
-
-      if (detectHueFrom <= detectHueTo)
-      {
-        m_detectRange = _itoll((detectValFrom<<16) | (detectSatFrom<<8) | detectHueFrom,
-                               (detectValTo  <<16) | (detectSatTo  <<8) | detectHueTo  );
-        m_detectExpected = 0x0;
-      }
-      else
-      {
-        assert(detectHueFrom > 0 && detectHueTo < 255);
-        m_detectRange = _itoll((detectValFrom<<16) | (detectSatFrom<<8) | (detectHueTo  +1),
-                               (detectValTo  <<16) | (detectSatTo  <<8) | (detectHueFrom-1));
-        m_detectExpected = 0x1;
-      }
+      m_widthM     = _inArgs.widthM;
+      m_heightN    = _inArgs.heightN;
+      m_widthStep  = m_outImageDesc.m_width / m_widthM;
+      m_heightStep = m_outImageDesc.m_height / m_heightN;
 
 #ifdef DEBUG_REPEAT
       for (unsigned repeat = 0; repeat < DEBUG_REPEAT; ++repeat) {
@@ -662,27 +529,19 @@ void clasterizeImage()
 #endif
 
       uint32_t resColor = 0;
-      int colorEntry=0;
       int colorClaster=0;
 
-      uint32_t maxResColor = 0;
-      int maxColorEntry = 0;
-      int maxColorClaster = 0;
-
-
       int counter = 0;
-      for(int i = 0; i < m;)
-      {
-        int rowStart = (i++)*rowStep;
-        int rowFinish = rowStart+rowStep;
-        for(int j = 0; j < n;)
-        {
-          int colStart = (j++)*colStep;
-          int colFinish = colStart+colStep;
-          resColor = GetImgColor(rowStart, rowFinish, colStart, colFinish, colorEntry);
+      int rowStart = 0;
+      for(int i = 0; i < m_heightN; ++i) {
+        int colStart = 0;
+        for(int j = 0; j < m_widthM; ++j) {
+          resColor = GetImgColor(rowStart, m_heightStep, colStart, m_widthStep);
           fillImage(rowStart, colStart, _outImage, resColor);
           _outArgs.outColor[counter++] = resColor;
+          colStart += m_widthStep;
         }
+        rowStart += m_heightStep;
       }
 
       return true;
