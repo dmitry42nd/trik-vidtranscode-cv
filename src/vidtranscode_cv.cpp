@@ -211,11 +211,11 @@ XDAS_Int32 trikCvHandleSetupDynamicParams(TrikCvHandle* _handle,
         XDAS_TRUE,						/* keepInputResolutionFlag[1] - disabled */
       },
       {
-        240,							/* outputHeight[0] = default output 320wx240h */
+        320,							/* outputHeight[0] = default output 320wx240h */
         0,							/* outputHeight[1] - don't care */
       },
       {
-        320,							/* outputWidth[0] = see outputHeight */
+        240,							/* outputWidth[0] = see outputHeight */
         0,							/* outputWidth[1] - don't care */
       },
       {

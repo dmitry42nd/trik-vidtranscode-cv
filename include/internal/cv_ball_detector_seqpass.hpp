@@ -368,7 +368,7 @@ void clasterizeImage()
     U_Hsv8x3 pixel;
     for(int row = _rowStart; row < _rowStart + _widthStep; row++)
       for(int column = _colStart; column < _colStart + _heightStep; column++) {
-        pixel.whole = _loll(img[row*m_outImageDesc.m_width + column]);
+        pixel.whole = _loll(img[row*m_inImageDesc.m_width + column]);
 
         ch = pixel.parts.h / m_hueScale;
         cs = pixel.parts.s / m_satScale;
@@ -511,8 +511,8 @@ void clasterizeImage()
 
       m_widthM     = _inArgs.widthM;
       m_heightN    = _inArgs.heightN;
-      m_widthStep  = m_outImageDesc.m_width / m_widthM;
-      m_heightStep = m_outImageDesc.m_height / m_heightN;
+      m_widthStep  = m_inImageDesc.m_width / m_widthM;
+      m_heightStep = m_inImageDesc.m_height / m_heightN;
 
 #ifdef DEBUG_REPEAT
       for (unsigned repeat = 0; repeat < DEBUG_REPEAT; ++repeat) {
