@@ -54,7 +54,7 @@ class BallDetector<TRIK_VIDTRANSCODE_CV_VIDEO_FORMAT_YUV422, TRIK_VIDTRANSCODE_C
 
     uint64_t m_detectRange;
     uint32_t m_detectExpected;
-    uint32_t m_srcToDstShift;
+    /*uint32_t*/double m_srcToDstShift;
 
     TrikCvImageDesc m_inImageDesc;
     TrikCvImageDesc m_outImageDesc;
@@ -80,8 +80,8 @@ class BallDetector<TRIK_VIDTRANSCODE_CV_VIDEO_FORMAT_YUV422, TRIK_VIDTRANSCODE_C
       const int32_t srcCol = range<int32_t>(_srcColBot, _srcCol, _srcColTop);
       const int32_t srcRow = range<int32_t>(_srcRowBot, _srcRow, _srcRowTop);
 
-      const int32_t dstRow = srcRow >> m_srcToDstShift;
-      const int32_t dstCol = srcCol >> m_srcToDstShift;
+      const int32_t dstRow = srcRow * m_srcToDstShift;
+      const int32_t dstCol = srcCol * m_srcToDstShift;
 
       const uint32_t dstOfs = dstRow*m_outImageDesc.m_lineLength + dstCol*sizeof(uint16_t);
       writeOutputPixel(reinterpret_cast<uint16_t*>(_outImage.m_ptr+dstOfs), _rgb888);
@@ -324,14 +324,14 @@ void clasterizeImage()
 #pragma MUST_ITERATE(4, ,4)
       for (uint32_t srcRow=0; srcRow < height; ++srcRow)
       {
-        const uint32_t dstRow = srcRow >> srcToDstShift;
+        const uint32_t dstRow = srcRow * srcToDstShift;
         uint16_t* restrict dstImageRow = reinterpret_cast<uint16_t*>(_outImage.m_ptr + dstRow*dstLineLength);
 
         assert(m_inImageDesc.m_width % 32 == 0); // verified in setup
 #pragma MUST_ITERATE(32, ,32)
         for (uint32_t srcCol=0; srcCol < width; ++srcCol)
         {
-          const uint32_t dstCol    = srcCol >> srcToDstShift;
+          const uint32_t dstCol    = srcCol * srcToDstShift;
           const uint64_t rgb888hsv = *rgb888hsvptr++;
           writeOutputPixel(dstImageRow+dstCol, _hill(rgb888hsv));
         }
@@ -458,6 +458,8 @@ void clasterizeImage()
       return rgbResult;
   }
 
+  #define min(x,y) x < y ? x : y;
+
   public:
     virtual bool setup(const TrikCvImageDesc& _inImageDesc,
                        const TrikCvImageDesc& _outImageDesc,
@@ -472,10 +474,13 @@ void clasterizeImage()
           || m_inImageDesc.m_height % 4  != 0)
         return false;
 
+/*
       for (m_srcToDstShift = 0; m_srcToDstShift < 32; ++m_srcToDstShift)
         if (   (m_inImageDesc.m_width >>m_srcToDstShift) <= m_outImageDesc.m_width
             && (m_inImageDesc.m_height>>m_srcToDstShift) <= m_outImageDesc.m_height)
           break;
+*/
+      m_srcToDstShift = (m_outImageDesc.m_width/m_inImageDesc.m_width, m_outImageDesc.m_height/m_inImageDesc.m_height);
 
       /* Static member initialization on first instance creation */
       if (s_mult43_div == NULL || s_mult255_div == NULL)
