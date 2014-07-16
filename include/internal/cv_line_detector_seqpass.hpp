@@ -33,7 +33,7 @@ class LineDetector<TRIK_VIDTRANSCODE_CV_VIDEO_FORMAT_YUV422, TRIK_VIDTRANSCODE_C
   private:
     uint64_t m_detectRange;
     uint32_t m_detectExpected;
-    uint32_t m_srcToDstShift;
+    /*uint32_t*/ double m_srcToDstShift;
 
 
     const int m_imageScaleCoeff = 1;
@@ -66,11 +66,11 @@ class LineDetector<TRIK_VIDTRANSCODE_CV_VIDEO_FORMAT_YUV422, TRIK_VIDTRANSCODE_C
     {
       const int32_t srcCol = range<int32_t>(_srcColBot, _srcCol, _srcColTop);
       const int32_t srcRow = range<int32_t>(_srcRowBot, _srcRow, _srcRowTop);
-      const uint32_t srcToDstShift  = m_srcToDstShift;
+      const /*uint32_t*/ double srcToDstShift  = m_srcToDstShift;
 
 
-      const int32_t dstRow = srcRow;
-      const int32_t dstCol = srcCol*0.75f;
+      const int32_t dstRow = srcRow * srcToDstShift;
+      const int32_t dstCol = srcCol * srcToDstShift;
 
 /*
       const int32_t dstRow = srcRow >> srcToDstShift;
@@ -235,7 +235,7 @@ class LineDetector<TRIK_VIDTRANSCODE_CV_VIDEO_FORMAT_YUV422, TRIK_VIDTRANSCODE_C
       const uint32_t width          = m_inImageDesc.m_width;
       const uint32_t height         = m_inImageDesc.m_height;
       const uint32_t dstLineLength  = m_outImageDesc.m_lineLength;
-      const uint32_t srcToDstShift  = m_srcToDstShift;
+      const /*uint32_t*/ double srcToDstShift  = m_srcToDstShift;
       const uint64_t u64_hsv_range  = m_detectRange;
       const uint32_t u32_hsv_expect = m_detectExpected;
       uint32_t targetPointsPerRow;
@@ -245,7 +245,7 @@ class LineDetector<TRIK_VIDTRANSCODE_CV_VIDEO_FORMAT_YUV422, TRIK_VIDTRANSCODE_C
 #pragma MUST_ITERATE(4, ,4)
       for (uint32_t srcRow=m_inImageFirstRow; srcRow < height; ++srcRow)
       {
-        const uint32_t dstRow = (srcRow - m_inImageFirstRow/2);//>> srcToDstShift;
+        const uint32_t dstRow = (srcRow - m_inImageFirstRow/2) * srcToDstShift;
         uint16_t* restrict dstImageRow = reinterpret_cast<uint16_t*>(_outImage.m_ptr + dstRow*dstLineLength);
 
         targetPointsPerRow = 0;
@@ -254,7 +254,7 @@ class LineDetector<TRIK_VIDTRANSCODE_CV_VIDEO_FORMAT_YUV422, TRIK_VIDTRANSCODE_C
 #pragma MUST_ITERATE(32, ,32)
         for (uint32_t srcCol=0; srcCol < width; ++srcCol)
         {
-          const uint32_t dstCol    = srcCol * 0.75f;//srcCol >> srcToDstShift;
+          const uint32_t dstCol    = srcCol * srcToDstShift;
           const uint64_t rgb888hsv = *rgb888hsvptr++;
 
           const bool det = detectHsvPixel(_loll(rgb888hsv), u64_hsv_range, u32_hsv_expect);
@@ -300,10 +300,8 @@ class LineDetector<TRIK_VIDTRANSCODE_CV_VIDEO_FORMAT_YUV422, TRIK_VIDTRANSCODE_C
           || m_inImageDesc.m_height % 4  != 0)
         return false;
 
-      for (m_srcToDstShift = 0; m_srcToDstShift < 32; ++m_srcToDstShift)
-        if (   (m_inImageDesc.m_width >>m_srcToDstShift) <= m_outImageDesc.m_width
-            && (m_inImageDesc.m_height>>m_srcToDstShift) <= m_outImageDesc.m_height)
-          break;
+      #define min(x,y) x < y ? x : y;
+      m_srcToDstShift = min(m_outImageDesc.m_width/m_inImageDesc.m_width, m_outImageDesc.m_height/m_inImageDesc.m_height);
 
       /* Static member initialization on first instance creation */
       if (s_mult43_div == NULL || s_mult255_div == NULL)
