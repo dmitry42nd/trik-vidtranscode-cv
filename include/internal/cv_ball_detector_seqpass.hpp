@@ -480,7 +480,7 @@ void clasterizeImage()
             && (m_inImageDesc.m_height>>m_srcToDstShift) <= m_outImageDesc.m_height)
           break;
 */
-      m_srcToDstShift = (m_outImageDesc.m_width/m_inImageDesc.m_width, m_outImageDesc.m_height/m_inImageDesc.m_height);
+      m_srcToDstShift = min(m_outImageDesc.m_width/m_inImageDesc.m_width, m_outImageDesc.m_height/m_inImageDesc.m_height);
 
       /* Static member initialization on first instance creation */
       if (s_mult43_div == NULL || s_mult255_div == NULL)
