@@ -301,7 +301,8 @@ class LineDetector<TRIK_VIDTRANSCODE_CV_VIDEO_FORMAT_YUV422, TRIK_VIDTRANSCODE_C
         return false;
 
       #define min(x,y) x < y ? x : y;
-      m_srcToDstShift = min(m_outImageDesc.m_width/m_inImageDesc.m_width, m_outImageDesc.m_height/m_inImageDesc.m_height);
+      m_srcToDstShift = min(static_cast<double>(m_outImageDesc.m_width)/m_inImageDesc.m_width, 
+                            static_cast<double>(m_outImageDesc.m_height)/m_inImageDesc.m_height);
 
       /* Static member initialization on first instance creation */
       if (s_mult43_div == NULL || s_mult255_div == NULL)
