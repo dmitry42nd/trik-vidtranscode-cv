@@ -79,9 +79,10 @@ class BallDetector<TRIK_VIDTRANSCODE_CV_VIDEO_FORMAT_YUV422, TRIK_VIDTRANSCODE_C
     {
       const int32_t srcCol = range<int32_t>(_srcColBot, _srcCol, _srcColTop);
       const int32_t srcRow = range<int32_t>(_srcRowBot, _srcRow, _srcRowTop);
+      const double srcToDstShift = m_srcToDstShift;
 
-      const int32_t dstRow = srcRow * m_srcToDstShift;
-      const int32_t dstCol = srcCol * m_srcToDstShift;
+      const int32_t dstRow = srcRow * srcToDstShift;
+      const int32_t dstCol = srcCol * srcToDstShift;
 
       const uint32_t dstOfs = dstRow*m_outImageDesc.m_lineLength + dstCol*sizeof(uint16_t);
       writeOutputPixel(reinterpret_cast<uint16_t*>(_outImage.m_ptr+dstOfs), _rgb888);
@@ -318,7 +319,7 @@ void clasterizeImage()
       const uint32_t width          = m_inImageDesc.m_width;
       const uint32_t height         = m_inImageDesc.m_height;
       const uint32_t dstLineLength  = m_outImageDesc.m_lineLength;
-      const uint32_t srcToDstShift  = m_srcToDstShift;
+      const /*uint32_t*/ double srcToDstShift  = m_srcToDstShift;
 
       assert(m_inImageDesc.m_height % 4 == 0); // verified in setup
 #pragma MUST_ITERATE(4, ,4)
@@ -480,7 +481,10 @@ void clasterizeImage()
             && (m_inImageDesc.m_height>>m_srcToDstShift) <= m_outImageDesc.m_height)
           break;
 */
-      m_srcToDstShift = min(m_outImageDesc.m_width/m_inImageDesc.m_width, m_outImageDesc.m_height/m_inImageDesc.m_height);
+      #define min(x,y) x < y ? x : y;
+      m_srcToDstShift = min(static_cast<double>(m_outImageDesc.m_width)/m_inImageDesc.m_width, 
+                            static_cast<double>(m_outImageDesc.m_height)/m_inImageDesc.m_height);
+
 
       /* Static member initialization on first instance creation */
       if (s_mult43_div == NULL || s_mult255_div == NULL)
