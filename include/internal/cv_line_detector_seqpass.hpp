@@ -433,9 +433,9 @@ class LineDetector<TRIK_VIDTRANSCODE_CV_VIDEO_FORMAT_YUV422P, TRIK_VIDTRANSCODE_
     }
 };
 
-uint16_t* restrict LineDetector<TRIK_VIDTRANSCODE_CV_VIDEO_FORMAT_YUV422,
+uint16_t* restrict LineDetector<TRIK_VIDTRANSCODE_CV_VIDEO_FORMAT_YUV422P,
                                 TRIK_VIDTRANSCODE_CV_VIDEO_FORMAT_RGB565X>::s_mult43_div = NULL;
-uint16_t* restrict LineDetector<TRIK_VIDTRANSCODE_CV_VIDEO_FORMAT_YUV422,
+uint16_t* restrict LineDetector<TRIK_VIDTRANSCODE_CV_VIDEO_FORMAT_YUV422P,
                                 TRIK_VIDTRANSCODE_CV_VIDEO_FORMAT_RGB565X>::s_mult255_div = NULL;
 
 
