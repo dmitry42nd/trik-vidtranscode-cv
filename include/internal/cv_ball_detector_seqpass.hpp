@@ -1,4 +1,4 @@
-#ifndef TRIK_VIDTRANSCODE_CV_INTERNAL_CV_BALL_DETECTOR_SEQPASS_HPP_
+  #ifndef TRIK_VIDTRANSCODE_CV_INTERNAL_CV_BALL_DETECTOR_SEQPASS_HPP_
 #define TRIK_VIDTRANSCODE_CV_INTERNAL_CV_BALL_DETECTOR_SEQPASS_HPP_
 
 #ifndef __cplusplus
@@ -44,7 +44,7 @@ union U_Hsv8x3
 };
 
 template <>
-class BallDetector<TRIK_VIDTRANSCODE_CV_VIDEO_FORMAT_YUV422, TRIK_VIDTRANSCODE_CV_VIDEO_FORMAT_RGB565X> : public CVAlgorithm
+class BallDetector<TRIK_VIDTRANSCODE_CV_VIDEO_FORMAT_YUV422P, TRIK_VIDTRANSCODE_CV_VIDEO_FORMAT_RGB565X> : public CVAlgorithm
 {
   private:
     uint8_t m_widthM;
@@ -250,36 +250,47 @@ class BallDetector<TRIK_VIDTRANSCODE_CV_VIDEO_FORMAT_YUV422, TRIK_VIDTRANSCODE_C
 
     void DEBUG_INLINE convertImageYuyvToHsv(const TrikCvImageBuffer& _inImage)
     {
-      const uint32_t srcImageRowEffectiveSize       = m_inImageDesc.m_width*sizeof(uint16_t);
+      const uint32_t srcImageRowEffectiveSize       = m_inImageDesc.m_width;
       const uint32_t srcImageRowEffectiveToFullSize = m_inImageDesc.m_lineLength - srcImageRowEffectiveSize;
-      const int8_t* restrict srcImageRow      = _inImage.m_ptr;
-      const int8_t* restrict srcImageTo       = srcImageRow + m_inImageDesc.m_lineLength*m_inImageDesc.m_height;
+      const int8_t* restrict srcImageRowY     = _inImage.m_ptr;
+      const int8_t* restrict srcImageRowC     = _inImage.m_ptr + m_inImageDesc.m_lineLength*m_inImageDesc.m_height;
+      const int8_t* restrict srcImageToY      = srcImageRowY + m_inImageDesc.m_lineLength*m_inImageDesc.m_height;
       uint64_t* restrict rgb888hsvptr         = s_rgb888hsv;
 
       assert(m_inImageDesc.m_height % 4 == 0); // verified in setup
 #pragma MUST_ITERATE(4, ,4)
-      while (srcImageRow != srcImageTo)
+      while (srcImageRowY != srcImageToY)
       {
-        assert(reinterpret_cast<intptr_t>(srcImageRow) % 8 == 0); // let's pray...
-        const uint64_t* restrict srcImageCol4 = reinterpret_cast<const uint64_t*>(srcImageRow);
-        srcImageRow += srcImageRowEffectiveSize;
+        assert(reinterpret_cast<intptr_t>(srcImageRowY) % 8 == 0); // let's pray...
+        assert(reinterpret_cast<intptr_t>(srcImageRowC) % 8 == 0); // let's pray...
+        const uint32_t* restrict srcImageColY4 = reinterpret_cast<const uint32_t*>(srcImageRowY);
+        const uint32_t* restrict srcImageColC4 = reinterpret_cast<const uint32_t*>(srcImageRowC);
+        srcImageRowY += srcImageRowEffectiveSize;
+        srcImageRowC += srcImageRowEffectiveSize;
 
         assert(m_inImageDesc.m_width % 32 == 0); // verified in setup
 #pragma MUST_ITERATE(32/4, ,32/4)
-        while (reinterpret_cast<const int8_t*>(srcImageCol4) != srcImageRow)
+        while (reinterpret_cast<const int8_t*>(srcImageColY4) != srcImageRowY)
         {
-          const uint64_t yuyv2x = *srcImageCol4++;
+          assert(reinterpret_cast<const int8_t*>(srcImageColC4) != srcImageRowC);
 
-          const uint64_t rgb12 = convert2xYuyvToRgb888(_loll(yuyv2x));
+          const uint32_t yy4x = *srcImageColY4++;
+          const uint32_t uv4x = _swap4(*srcImageColC4++);
+
+          const uint32_t yuyv12 = (_unpklu4(yy4x)) | (_unpklu4(uv4x)<<8);
+          const uint32_t yuyv34 = (_unpkhu4(yy4x)) | (_unpkhu4(uv4x)<<8);
+
+          const uint64_t rgb12 = convert2xYuyvToRgb888(yuyv12);
           *rgb888hsvptr++ = _itoll(_loll(rgb12), convertRgb888ToHsv(_loll(rgb12)));
           *rgb888hsvptr++ = _itoll(_hill(rgb12), convertRgb888ToHsv(_hill(rgb12)));
 
-          const uint64_t rgb34 = convert2xYuyvToRgb888(_hill(yuyv2x));
+          const uint64_t rgb34 = convert2xYuyvToRgb888(yuyv34);
           *rgb888hsvptr++ = _itoll(_loll(rgb34), convertRgb888ToHsv(_loll(rgb34)));
           *rgb888hsvptr++ = _itoll(_hill(rgb34), convertRgb888ToHsv(_hill(rgb34)));
         }
 
-        srcImageRow += srcImageRowEffectiveToFullSize;
+        srcImageRowY += srcImageRowEffectiveToFullSize;
+        srcImageRowC += srcImageRowEffectiveToFullSize;
       }
     }
 
@@ -557,9 +568,9 @@ void clasterizeImage()
     }
 };
 
-uint16_t* restrict BallDetector<TRIK_VIDTRANSCODE_CV_VIDEO_FORMAT_YUV422,
+uint16_t* restrict BallDetector<TRIK_VIDTRANSCODE_CV_VIDEO_FORMAT_YUV422P,
                                 TRIK_VIDTRANSCODE_CV_VIDEO_FORMAT_RGB565X>::s_mult43_div = NULL;
-uint16_t* restrict BallDetector<TRIK_VIDTRANSCODE_CV_VIDEO_FORMAT_YUV422,
+uint16_t* restrict BallDetector<TRIK_VIDTRANSCODE_CV_VIDEO_FORMAT_YUV422P,
 
                                 TRIK_VIDTRANSCODE_CV_VIDEO_FORMAT_RGB565X>::s_mult255_div = NULL;
 
