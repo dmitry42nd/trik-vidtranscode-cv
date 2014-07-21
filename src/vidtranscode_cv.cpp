@@ -77,7 +77,7 @@ XDAS_Int32 handleSetupImageDescCreateCVAlgorithm(const TrikCvHandle* _handle,
   if (_inImageDesc.m_format == _inFormat && _outImageDesc.m_format == _outFormat) \
     return createCVAlgorithm<_CVAlgorithm<_inFormat, _outFormat> >(_handle, _pd, _inImageDesc, _outImageDesc)
 
-  IF_IN_OUT_FORMAT(trik::cv::BallDetector, TRIK_VIDTRANSCODE_CV_VIDEO_FORMAT_YUV422, TRIK_VIDTRANSCODE_CV_VIDEO_FORMAT_RGB565X);
+  IF_IN_OUT_FORMAT(trik::cv::BallDetector, TRIK_VIDTRANSCODE_CV_VIDEO_FORMAT_YUV422P, TRIK_VIDTRANSCODE_CV_VIDEO_FORMAT_RGB565X);
 
 #undef IF_IN_OUT_FORMAT
 
@@ -154,7 +154,7 @@ XDAS_Int32 trikCvHandleSetupParams(TrikCvHandle* _handle,
     {							/* m_base, IVIDTRANSCODE_Params */
       sizeof(TRIK_VIDTRANSCODE_CV_Params),		/* size = sizeof this struct */
       1,						/* numOutputStreams = only one output stream by default */
-      TRIK_VIDTRANSCODE_CV_VIDEO_FORMAT_YUV422,		/* formatInput = YUV422 */
+      TRIK_VIDTRANSCODE_CV_VIDEO_FORMAT_YUV422P,		/* formatInput = YUV422P */
       {
         TRIK_VIDTRANSCODE_CV_VIDEO_FORMAT_RGB565X,	/* formatOutput[0] = RGB565X */
         TRIK_VIDTRANSCODE_CV_VIDEO_FORMAT_UNKNOWN,	/* formatOutput[1] - disabled */
