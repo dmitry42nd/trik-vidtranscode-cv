@@ -35,6 +35,10 @@ class LineDetector<TRIK_VIDTRANSCODE_CV_VIDEO_FORMAT_YUV422P, TRIK_VIDTRANSCODE_
     uint32_t m_detectExpected;
     /*uint32_t*/ double m_srcToDstShift;
 
+    uint32_t m_hStart;
+    uint32_t m_hStop;
+    uint32_t m_crossPoints;
+    int8_t   m_crossDetected;
 
     const int m_imageScaleCoeff = 1;
     int m_inImageFirstRow;
@@ -115,6 +119,24 @@ class LineDetector<TRIK_VIDTRANSCODE_CV_VIDEO_FORMAT_YUV422P, TRIK_VIDTRANSCODE_
         drawOutputPixelBound(_srcCol  , _srcRow+adj, widthBot, widthTop, heightBot, heightTop, _outImage, _rgb888);
       }
     }
+
+
+    void __attribute__((always_inline)) drawRgbHorizontalLine(const int32_t _srcCol, 
+                                                              const int32_t _srcRow,
+                                                              const TrikCvImageBuffer& _outImage,
+                                                              const uint32_t _rgb888)
+    {
+      const int32_t widthBot  = 0;
+      const int32_t widthTop  = m_inImageDesc.m_width-1;
+      const int32_t heightBot = 0;
+      const int32_t heightTop = m_inImageDesc.m_height-1;
+
+      for (int adj = 0; adj < m_inImageDesc.m_width; ++adj)
+      {
+        drawOutputPixelBound(_srcCol+adj, _srcRow, widthBot, widthTop, heightBot, heightTop, _outImage, _rgb888);
+      }
+    }
+
 
     static bool __attribute__((always_inline)) detectHsvPixel(const uint32_t _hsv,
                                                               const uint64_t _hsv_range,
@@ -278,6 +300,8 @@ class LineDetector<TRIK_VIDTRANSCODE_CV_VIDEO_FORMAT_YUV422P, TRIK_VIDTRANSCODE_
         m_targetX      += targetPointsCol;
         m_targetY      += srcRow*targetPointsPerRow;
         m_targetPoints += targetPointsPerRow;
+        if (srcRow >= m_hStart && srcRow <= m_hStop)
+          m_crossPoints += targetPointsPerRow;
       }
     }
 
@@ -351,6 +375,7 @@ class LineDetector<TRIK_VIDTRANSCODE_CV_VIDEO_FORMAT_YUV422P, TRIK_VIDTRANSCODE_
 
       m_targetX = 0;
       m_targetPoints = 0;
+      m_crossPoints = 0;
 
       m_inImageFirstRow = m_inImageDesc.m_height - m_inImageDesc.m_height/m_imageScaleCoeff;
 
@@ -380,6 +405,7 @@ class LineDetector<TRIK_VIDTRANSCODE_CV_VIDEO_FORMAT_YUV422P, TRIK_VIDTRANSCODE_
 
       XDAS_Int32 drawY = m_inImageFirstRow - m_inImageDesc.m_height/2 + m_inImageDesc.m_height/(2*m_imageScaleCoeff);
       const int hWidth = m_inImageDesc.m_width/2;
+      const int hHeight = m_inImageDesc.m_height/2;
       const int step = 40;
 
 #ifdef DEBUG_REPEAT
@@ -411,6 +437,14 @@ class LineDetector<TRIK_VIDTRANSCODE_CV_VIDEO_FORMAT_YUV422P, TRIK_VIDTRANSCODE_
       drawRgbThinLine(hWidth - 2*step, drawY, _outImage, 0xff00ff);
       drawRgbThinLine(hWidth + 2*step, drawY, _outImage, 0xff00ff);
 
+      m_hStart = hHeight;
+      m_hStop = hHeight + 2*step;
+
+      int crossSize = static_cast<XDAS_UInt32>(m_crossPoints*100)/(m_inImageDesc.m_width*2*step);
+
+      drawRgbHorizontalLine(0, m_hStart, _outImage, 0xff0000);
+      drawRgbHorizontalLine(0, m_hStop, _outImage, 0xff0000);
+
       _outArgs.targetX = 0;
       _outArgs.targetY = 0;
       _outArgs.targetSize = 0;
@@ -419,13 +453,13 @@ class LineDetector<TRIK_VIDTRANSCODE_CV_VIDEO_FORMAT_YUV422P, TRIK_VIDTRANSCODE_
       {
         const int32_t inImagePixels = m_inImageDesc.m_height * m_inImageDesc.m_width;
         const int32_t targetX = m_targetX/m_targetPoints;
-//         const int32_t targetY = m_targetY/m_targetPoints;
 
         assert(m_inImageDesc.m_height > 0 && m_inImageDesc.m_width > 0); // more or less safe since no target points would be detected otherwise
 
         drawRgbTargetCenterLine(targetX, drawY, _outImage, 0xff0000);
 
         _outArgs.targetX = ((targetX - static_cast<int32_t>(m_inImageDesc.m_width) /2) * 100*2) / static_cast<int32_t>(m_inImageDesc.m_width);
+        _outArgs.targetY = crossSize;
         _outArgs.targetSize = static_cast<XDAS_UInt32>(m_targetPoints*100*m_imageScaleCoeff)/inImagePixels;
       }
 
