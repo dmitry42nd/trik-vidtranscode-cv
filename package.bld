@@ -34,7 +34,7 @@ for (var i = 0; i < Build.targets.length; i++) {
 
     print("building for target " + targ.name + " ...");
 
-    /* Build for all profiles */
+   /* Build for all profiles */
     for (var profile in targ.profiles) {
 
         var libName = "lib/" + profile + "/trik_vidtranscode_cv";
