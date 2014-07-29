@@ -438,7 +438,7 @@ class LineDetector<TRIK_VIDTRANSCODE_CV_VIDEO_FORMAT_YUV422P, TRIK_VIDTRANSCODE_
       drawRgbThinLine(hWidth + 2*step, drawY, _outImage, 0xff00ff);
 
       m_hStart = hHeight;
-      m_hStop = hHeight + 2*step;
+      m_hStop  = hHeight + 2*step;
 
       int crossSize = static_cast<XDAS_UInt32>(m_crossPoints*100)/(m_inImageDesc.m_width*2*step);
 
