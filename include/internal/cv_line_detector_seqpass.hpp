@@ -291,11 +291,14 @@ class LineDetector<TRIK_VIDTRANSCODE_CV_VIDEO_FORMAT_YUV422P, TRIK_VIDTRANSCODE_
         {
           const uint32_t dstCol    = srcCol * srcToDstShift;
           const uint64_t rgb888hsv = *rgb888hsvptr++;
-
-          const bool det = detectHsvPixel(_loll(rgb888hsv), u64_hsv_range, u32_hsv_expect);
-          targetPointsPerRow += det;
-          targetPointsCol += det?srcCol:0;
-          writeOutputPixel(dstImageRow+dstCol, det?0x00ffff:_hill(rgb888hsv));
+          
+          bool det = false;
+          if (srcCol >= 5 && srcCol <= width - 5) {
+            det = detectHsvPixel(_loll(rgb888hsv), u64_hsv_range, u32_hsv_expect);
+            targetPointsPerRow += det;
+            targetPointsCol += det?srcCol:0;
+            writeOutputPixel(dstImageRow+dstCol, det?0x00ffff:_hill(rgb888hsv));
+          }
         }
         m_targetX      += targetPointsCol;
         m_targetY      += srcRow*targetPointsPerRow;
