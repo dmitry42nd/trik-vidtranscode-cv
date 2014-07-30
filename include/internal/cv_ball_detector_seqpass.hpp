@@ -159,7 +159,7 @@ class BallDetector<TRIK_VIDTRANSCODE_CV_VIDEO_FORMAT_YUV422P, TRIK_VIDTRANSCODE_
       const int32_t heightBot = 0;
       const int32_t heightTop = m_inImageDesc.m_height-1;
 
-      for (int adj = 0; adj < 100; ++adj)
+      for (int adj = 0; adj < 100; ++adj) 
       {
         drawOutputPixelBound(_srcCol-adj  , _srcRow, widthBot, widthTop, heightBot, heightTop, _outImage, _rgb888);
         drawOutputPixelBound(_srcCol+adj  , _srcRow, widthBot, widthTop, heightBot, heightTop, _outImage, _rgb888);
@@ -205,14 +205,14 @@ class BallDetector<TRIK_VIDTRANSCODE_CV_VIDEO_FORMAT_YUV422P, TRIK_VIDTRANSCODE_
                            reinterpret_cast<const int16_t*>(s_yGrad),
                            width, height,
                            reinterpret_cast<int16_t*>(s_harrisScore),
-                           2293, 
+                           2500, 
                            reinterpret_cast<uint8_t*>(s_buffer));
 
       VLIB_nonMaxSuppress_7x7_S16(reinterpret_cast<const int16_t*>(s_harrisScore), 
-                                  width, height, 15000, 
+                                  width, height, 17000, 
                                   reinterpret_cast<uint8_t*>(s_y2));
 
-      proceedImageHsv(_inImage, _outImage);
+      //proceedImageHsv(_inImage, _outImage);
 
 //in_img to rgb565 & out
       const short* restrict coeff = s_coeff;
@@ -222,26 +222,33 @@ class BallDetector<TRIK_VIDTRANSCODE_CV_VIDEO_FORMAT_YUV422P, TRIK_VIDTRANSCODE_
       unsigned short* rgb565_out           = reinterpret_cast<unsigned short*>(_outImage.m_ptr);
       IMG_ycbcr422pl_to_rgb565(coeff, res_in, cb_in, cr_in, rgb565_out, 320*240);
 
+      proceedImageHsv(_inImage, _outImage);
+
 //highlight corners
       const uint8_t* restrict corners  = reinterpret_cast<uint8_t*>(s_y2);
       #pragma MUST_ITERATE(8, ,8)
       for(int r = 0; r < 240; r++) {
         #pragma MUST_ITERATE(8, ,8)
         for(int c = 0; c < 320; c++) {
-          if (*(corners++) != 0)
-            drawCornerHighlight(c, r, _outImage, 0xffff);
+          if(c > 10 && c < 310 && r > 5 && r < 235)
+            if (*corners != 0)
+              drawCornerHighlight(c, r, _outImage, 0xff0000);
+          corners++;
         } 
       }
     }
 
     void DEBUG_INLINE proceedImageHsv(const TrikCvImageBuffer& _inImage, TrikCvImageBuffer& _outImage)
     {
-      const uint8_t* restrict img_in = reinterpret_cast<const uint8_t*>(_inImage.m_ptr);
+      const uint8_t* restrict rgb888hsvptr = reinterpret_cast<const uint8_t*>(_inImage.m_ptr);
       const uint32_t width          = m_inImageDesc.m_width;
       const uint32_t height         = m_inImageDesc.m_height;
       const uint32_t dstLineLength  = m_outImageDesc.m_lineLength;
-      const uint8_t th = 60;
-      const uint8_t srcToDstShift = 1;
+      const /*uint32_t*/ double srcToDstShift  = m_srcToDstShift;
+/*
+      const uint64_t u64_hsv_range  = m_detectRange;
+      const uint32_t u32_hsv_expect = m_detectExpected;
+*/
       uint32_t targetPointsPerRow;
       uint32_t targetPointsCol;
 
@@ -258,16 +265,15 @@ class BallDetector<TRIK_VIDTRANSCODE_CV_VIDEO_FORMAT_YUV422P, TRIK_VIDTRANSCODE_
 #pragma MUST_ITERATE(32, ,32)
         for (uint32_t srcCol=0; srcCol < width; ++srcCol)
         {
-          if((srcCol < 5) || (srcCol > width - 5)) {
-            img_in++;
-          } else {
-            const uint32_t dstCol    = srcCol * srcToDstShift;
-            const bool det = *(img_in++) < th;
-            targetPointsPerRow += det;
-            targetPointsCol += det?srcCol:0;
-            writeOutputPixel(dstImageRow+dstCol, det?0x00ffff:*(srcImageRow+dstCol));
-          }
-        }
+          const uint32_t dstCol    = srcCol * srcToDstShift;
+          const uint8_t rgb888hsv = *rgb888hsvptr++;
+
+          const bool det = rgb888hsv < 60;
+          targetPointsPerRow += det;
+          targetPointsCol += det?srcCol:0;
+          if(det)
+            writeOutputPixel(dstImageRow+dstCol, 0x00ffff);
+        } 
         m_targetX      += targetPointsCol;
         m_targetY      += srcRow*targetPointsPerRow;
         m_targetPoints += targetPointsPerRow;
@@ -346,6 +352,8 @@ class BallDetector<TRIK_VIDTRANSCODE_CV_VIDEO_FORMAT_YUV422P, TRIK_VIDTRANSCODE_
       } // repeat
 #endif
 
+      XDAS_Int32 drawY = m_inImageDesc.m_height/2;
+
       if (m_targetPoints > 0)
       {
         const int32_t targetX = m_targetX/m_targetPoints;
@@ -354,7 +362,8 @@ class BallDetector<TRIK_VIDTRANSCODE_CV_VIDEO_FORMAT_YUV422P, TRIK_VIDTRANSCODE_
         assert(m_inImageDesc.m_height > 0 && m_inImageDesc.m_width > 0); // more or less safe since no target points would be detected otherwise
         const uint32_t targetRadius = std::ceil(std::sqrt(static_cast<float>(m_targetPoints) / 3.1415927f));
 
-  
+        drawRgbTargetCenterLine(targetX, drawY, _outImage, 0xff0000);  
+
         _outArgs.targetX = ((targetX - static_cast<int32_t>(m_inImageDesc.m_width) /2) * 100*2) / static_cast<int32_t>(m_inImageDesc.m_width);
         _outArgs.targetY = ((targetY - static_cast<int32_t>(m_inImageDesc.m_height)/2) * 100*2) / static_cast<int32_t>(m_inImageDesc.m_height);
         _outArgs.targetSize = static_cast<uint32_t>(targetRadius*100*4) / static_cast<uint32_t>(m_inImageDesc.m_width + m_inImageDesc.m_height);
