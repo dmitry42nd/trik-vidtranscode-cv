@@ -172,6 +172,9 @@ class BallDetector<TRIK_VIDTRANSCODE_CV_VIDEO_FORMAT_YUV422P, TRIK_VIDTRANSCODE_
       const uint32_t width          = m_inImageDesc.m_width;
       const uint32_t height         = m_inImageDesc.m_height;
       const uint32_t imgSize        = width*height;
+
+      uint16_t targetPointsPerRow;
+      uint16_t targetPointsCol;
 //separate Cb Cr
       uint8_t* restrict cb   = reinterpret_cast<uint8_t*>(s_cb);
       uint8_t* restrict cr   = reinterpret_cast<uint8_t*>(s_cr);
@@ -184,13 +187,30 @@ class BallDetector<TRIK_VIDTRANSCODE_CV_VIDEO_FORMAT_YUV422P, TRIK_VIDTRANSCODE_
           CbCr++;
       }
 
-/*
+
 //Sobel edge detection
       const unsigned char* restrict y_in_sobel  = reinterpret_cast<const unsigned char*>(_inImage.m_ptr);
       unsigned char* restrict   sobel_out = reinterpret_cast<unsigned char*>(s_y);
       IMG_sobel_3x3_8(y_in_sobel, sobel_out, width, height);
-*/
 
+      IMG_thr_gt2max_8(reinterpret_cast<const unsigned char*>(s_y), 
+                       reinterpret_cast<unsigned char*>(s_y),
+                       320, 240, 50);
+
+      const uint8_t* restrict y = reinterpret_cast<unsigned char*>(s_y),
+      for(int r = 0; r < height; r++) {
+        targetPointsPerRow = 0;
+        targetPointsCol = 0;
+        for(int c = 0; c < width; c++) {
+          const bool det = (*(y++) == 0xFF);
+          targetPointsPerRow += det;
+          targetPointsCol += det?c:0;;
+        }
+        m_targetX      += targetPointsCol;
+        m_targetPoints += targetPointsPerRow;
+      }
+
+/*
 //Harris corner detector
       VLIB_xyGradientsAndMagnitude(reinterpret_cast<const uint8_t*>(_inImage.m_ptr), 
                                    reinterpret_cast<int16_t*>(s_xGrad), 
@@ -211,18 +231,18 @@ class BallDetector<TRIK_VIDTRANSCODE_CV_VIDEO_FORMAT_YUV422P, TRIK_VIDTRANSCODE_
       VLIB_nonMaxSuppress_7x7_S16(reinterpret_cast<const int16_t*>(s_harrisScore), 
                                   width, height, 17000, 
                                   reinterpret_cast<uint8_t*>(s_y2));
-
-      //proceedImageHsv(_inImage, _outImage);
+*/
 
 //in_img to rgb565 & out
       const short* restrict coeff = s_coeff;
-      const unsigned char* restrict res_in = reinterpret_cast<const unsigned char*>(_inImage.m_ptr);
+      const unsigned char* restrict res_in = reinterpret_cast<const unsigned char*>(s_y);
       const unsigned char* restrict cb_in  = reinterpret_cast<const unsigned char*>(s_cb);
       const unsigned char* restrict cr_in  = reinterpret_cast<const unsigned char*>(s_cr);
       unsigned short* rgb565_out           = reinterpret_cast<unsigned short*>(_outImage.m_ptr);
       IMG_ycbcr422pl_to_rgb565(coeff, res_in, cb_in, cr_in, rgb565_out, 320*240);
 
-      proceedImageHsv(_inImage, _outImage);
+/*
+      //proceedImageHsv(_inImage, _outImage);
 
 //highlight corners
       const uint8_t* restrict corners  = reinterpret_cast<uint8_t*>(s_y2);
@@ -236,7 +256,20 @@ class BallDetector<TRIK_VIDTRANSCODE_CV_VIDEO_FORMAT_YUV422P, TRIK_VIDTRANSCODE_
           corners++;
         } 
       }
+*/
     }
+
+
+    static bool __attribute__((always_inline)) detectHsvPixel(const uint32_t _hsv,
+                                                              const uint64_t _hsv_range,
+                                                              const uint32_t _hsv_expect)
+    {
+      const uint32_t u32_hsv_det = _cmpltu4(_hsv, _hill(_hsv_range))
+                                 | _cmpgtu4(_hsv, _loll(_hsv_range));
+
+      return (u32_hsv_det == _hsv_expect);
+    }
+
 
     void DEBUG_INLINE proceedImageHsv(const TrikCvImageBuffer& _inImage, TrikCvImageBuffer& _outImage)
     {
@@ -245,10 +278,8 @@ class BallDetector<TRIK_VIDTRANSCODE_CV_VIDEO_FORMAT_YUV422P, TRIK_VIDTRANSCODE_
       const uint32_t height         = m_inImageDesc.m_height;
       const uint32_t dstLineLength  = m_outImageDesc.m_lineLength;
       const /*uint32_t*/ double srcToDstShift  = m_srcToDstShift;
-/*
       const uint64_t u64_hsv_range  = m_detectRange;
       const uint32_t u32_hsv_expect = m_detectExpected;
-*/
       uint32_t targetPointsPerRow;
       uint32_t targetPointsCol;
 
@@ -266,9 +297,9 @@ class BallDetector<TRIK_VIDTRANSCODE_CV_VIDEO_FORMAT_YUV422P, TRIK_VIDTRANSCODE_
         for (uint32_t srcCol=0; srcCol < width; ++srcCol)
         {
           const uint32_t dstCol    = srcCol * srcToDstShift;
-          const uint8_t rgb888hsv = *rgb888hsvptr++;
+          const uint32_t rgb888hsv = static_cast<const uint32_t>(*rgb888hsvptr++) << 16;
 
-          const bool det = rgb888hsv < 60;
+          const bool det = detectHsvPixel(rgb888hsv, u64_hsv_range, u32_hsv_expect);
           targetPointsPerRow += det;
           targetPointsCol += det?srcCol:0;
           if(det)
@@ -334,12 +365,27 @@ class BallDetector<TRIK_VIDTRANSCODE_CV_VIDEO_FORMAT_YUV422P, TRIK_VIDTRANSCODE_
       m_targetY = 0;
       m_targetPoints = 0;
 
+      uint32_t detectHueFrom = 0;
+      uint32_t detectHueTo   = 255;
+      uint32_t detectSatFrom = 0;
+      uint32_t detectSatTo   = 255;
       uint32_t detectValFrom = range<int32_t>(0, (static_cast<int32_t>(_inArgs.detectValFrom) * 255) / 100, 255); // scaling 0..100 to 0..255
       uint32_t detectValTo   = range<int32_t>(0, (static_cast<int32_t>(_inArgs.detectValTo  ) * 255) / 100, 255); // scaling 0..100 to 0..255
+      bool     autoDetectHsv = static_cast<bool>(_inArgs.autoDetectHsv); // true or false
 
-      m_detectRange = _itoll((detectValFrom<<16) | (0<<8) | 0,
-                             (detectValTo  <<16) | (0<<8) | 0  );
-      m_detectExpected = 0x0;
+      if (detectHueFrom <= detectHueTo)
+      {
+        m_detectRange = _itoll((detectValFrom<<16) | (detectSatFrom<<8) | detectHueFrom,
+                               (detectValTo  <<16) | (detectSatTo  <<8) | detectHueTo  );
+        m_detectExpected = 0x0;
+      }
+      else
+      {
+        assert(detectHueFrom > 0 && detectHueTo < 255);
+        m_detectRange = _itoll((detectValFrom<<16) | (detectSatFrom<<8) | (detectHueTo  +1),
+                               (detectValTo  <<16) | (detectSatTo  <<8) | (detectHueFrom-1));
+        m_detectExpected = 0x1;
+      }
 
 #ifdef DEBUG_REPEAT
       for (unsigned repeat = 0; repeat < DEBUG_REPEAT; ++repeat) {
