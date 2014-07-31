@@ -172,6 +172,7 @@ class BallDetector<TRIK_VIDTRANSCODE_CV_VIDEO_FORMAT_YUV422P, TRIK_VIDTRANSCODE_
       const uint32_t width          = m_inImageDesc.m_width;
       const uint32_t height         = m_inImageDesc.m_height;
       const uint32_t imgSize        = width*height;
+      const double srcToDstShift    = m_srcToDstShift;
 
       uint16_t targetPointsPerRow;
       uint16_t targetPointsCol;
@@ -190,21 +191,25 @@ class BallDetector<TRIK_VIDTRANSCODE_CV_VIDEO_FORMAT_YUV422P, TRIK_VIDTRANSCODE_
 
 //Sobel edge detection
       const unsigned char* restrict y_in_sobel  = reinterpret_cast<const unsigned char*>(_inImage.m_ptr);
-      unsigned char* restrict   sobel_out = reinterpret_cast<unsigned char*>(s_y);
+      unsigned char* restrict sobel_out = reinterpret_cast<unsigned char*>(s_y);
       IMG_sobel_3x3_8(y_in_sobel, sobel_out, width, height);
 
       IMG_thr_gt2max_8(reinterpret_cast<const unsigned char*>(s_y), 
                        reinterpret_cast<unsigned char*>(s_y),
-                       320, 240, 50);
+                       width, height, 50);
 
-      const uint8_t* restrict y = reinterpret_cast<unsigned char*>(s_y),
+      const uint8_t* restrict y = reinterpret_cast<unsigned char*>(s_y);
+      
       for(int r = 0; r < height; r++) {
+        uint16_t rp = r*width;
         targetPointsPerRow = 0;
         targetPointsCol = 0;
         for(int c = 0; c < width; c++) {
-          const bool det = (*(y++) == 0xFF);
-          targetPointsPerRow += det;
-          targetPointsCol += det?c:0;;
+          if(c > 5 && c < width - 5) {
+            const bool det = (y[rp+c] == 0xFF);
+            targetPointsPerRow += det;
+            targetPointsCol += det?c:0;
+          }
         }
         m_targetX      += targetPointsCol;
         m_targetPoints += targetPointsPerRow;
@@ -239,10 +244,10 @@ class BallDetector<TRIK_VIDTRANSCODE_CV_VIDEO_FORMAT_YUV422P, TRIK_VIDTRANSCODE_
       const unsigned char* restrict cb_in  = reinterpret_cast<const unsigned char*>(s_cb);
       const unsigned char* restrict cr_in  = reinterpret_cast<const unsigned char*>(s_cr);
       unsigned short* rgb565_out           = reinterpret_cast<unsigned short*>(_outImage.m_ptr);
-      IMG_ycbcr422pl_to_rgb565(coeff, res_in, cb_in, cr_in, rgb565_out, 320*240);
+      IMG_ycbcr422pl_to_rgb565(coeff, res_in, cb_in, cr_in, rgb565_out, width*height);
 
 /*
-      //proceedImageHsv(_inImage, _outImage);
+//    proceedImageHsv(_inImage, _outImage);
 
 //highlight corners
       const uint8_t* restrict corners  = reinterpret_cast<uint8_t*>(s_y2);
@@ -257,6 +262,7 @@ class BallDetector<TRIK_VIDTRANSCODE_CV_VIDEO_FORMAT_YUV422P, TRIK_VIDTRANSCODE_
         } 
       }
 */
+
     }
 
 
