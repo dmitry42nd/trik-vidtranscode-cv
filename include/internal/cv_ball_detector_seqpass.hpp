@@ -13,6 +13,7 @@
 extern "C" {
 #include <include/IMG_ycbcr422pl_to_rgb565.h>
 #include <include/IMG_thr_gt2max_8.h>
+//#include <include/IMG_thr_le2min_8.h>
 #include <include/IMG_sobel_3x3_8.h>
 #include <ti/vlib/src/VLIB_xyGradientsAndMagnitude/VLIB_xyGradientsAndMagnitude.h>
 #include <ti/vlib/src/VLIB_harrisScore_7x7/VLIB_harrisScore_7x7.h>
@@ -199,17 +200,27 @@ class BallDetector<TRIK_VIDTRANSCODE_CV_VIDEO_FORMAT_YUV422P, TRIK_VIDTRANSCODE_
                        width, height, 50);
 
       const uint8_t* restrict y = reinterpret_cast<unsigned char*>(s_y);
+      uint8_t* restrict y2 = reinterpret_cast<unsigned char*>(s_y2);
       
+      assert(m_inImageDesc.m_height % 4 == 0); // verified in setup
+      #pragma MUST_ITERATE(4, ,4)
       for(int r = 0; r < height; r++) {
-        uint16_t rp = r*width;
+//        const uint32_t dR = r * srcToDstShift;
+//        int8_t* restrict dIR = reinterpret_cast<uint8_t*>(y2 + dR*dstLineLength);
+
         targetPointsPerRow = 0;
         targetPointsCol = 0;
+
+        assert(m_inImageDesc.m_width % 32 == 0); // verified in setup
+#pragma MUST_ITERATE(32, ,32)
         for(int c = 0; c < width; c++) {
-          if(c > 5 && c < width - 5) {
-            const bool det = (y[rp+c] == 0xFF);
+//          const uint32_t dC = c * srcToDstShift;
+          if(c > 10 && c < width - 10) {
+            const bool det = (*y == 0xFF);
             targetPointsPerRow += det;
             targetPointsCol += det?c:0;
           }
+          y++;
         }
         m_targetX      += targetPointsCol;
         m_targetPoints += targetPointsPerRow;
