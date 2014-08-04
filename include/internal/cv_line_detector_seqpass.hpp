@@ -23,9 +23,8 @@
 
 #warning Eliminate global var
 static uint64_t s_rgb888hsv[640*480];
-
-
-
+static uint32_t s_wi2wo[640];
+static uint32_t s_hi2ho[480];
 
 template <>
 class LineDetector<TRIK_VIDTRANSCODE_CV_VIDEO_FORMAT_YUV422P, TRIK_VIDTRANSCODE_CV_VIDEO_FORMAT_RGB565X> : public CVAlgorithm
@@ -33,7 +32,6 @@ class LineDetector<TRIK_VIDTRANSCODE_CV_VIDEO_FORMAT_YUV422P, TRIK_VIDTRANSCODE_
   private:
     uint64_t m_detectRange;
     uint32_t m_detectExpected;
-    /*uint32_t*/ double m_srcToDstShift;
 
     uint32_t m_hStart;
     uint32_t m_hStop;
@@ -70,16 +68,9 @@ class LineDetector<TRIK_VIDTRANSCODE_CV_VIDEO_FORMAT_YUV422P, TRIK_VIDTRANSCODE_
     {
       const int32_t srcCol = range<int32_t>(_srcColBot, _srcCol, _srcColTop);
       const int32_t srcRow = range<int32_t>(_srcRowBot, _srcRow, _srcRowTop);
-      const /*uint32_t*/ double srcToDstShift  = m_srcToDstShift;
 
-
-      const int32_t dstRow = srcRow * srcToDstShift;
-      const int32_t dstCol = srcCol * srcToDstShift;
-
-/*
-      const int32_t dstRow = srcRow >> srcToDstShift;
-      const int32_t dstCol = srcCol >> srcToDstShift;
-*/
+      const int32_t dstRow = s_hi2ho[srcRow];
+      const int32_t dstCol = s_wi2wo[srcCol];
 
       const uint32_t dstOfs = dstRow*m_outImageDesc.m_lineLength + dstCol*sizeof(uint16_t);
 
@@ -270,26 +261,27 @@ class LineDetector<TRIK_VIDTRANSCODE_CV_VIDEO_FORMAT_YUV422P, TRIK_VIDTRANSCODE_
       const uint32_t width          = m_inImageDesc.m_width;
       const uint32_t height         = m_inImageDesc.m_height;
       const uint32_t dstLineLength  = m_outImageDesc.m_lineLength;
-      const /*uint32_t*/ double srcToDstShift  = m_srcToDstShift;
       const uint64_t u64_hsv_range  = m_detectRange;
       const uint32_t u32_hsv_expect = m_detectExpected;
       uint32_t targetPointsPerRow;
       uint32_t targetPointsCol;
 
+      const uint32_t* restrict p_hi2ho = s_hi2ho;
       assert(m_inImageDesc.m_height % 4 == 0); // verified in setup
 #pragma MUST_ITERATE(4, ,4)
-      for (uint32_t srcRow=m_inImageFirstRow; srcRow < height; ++srcRow)
+      for (uint32_t srcRow=0; srcRow < height; ++srcRow)
       {
-        const uint32_t dstRow = (srcRow - m_inImageFirstRow/2) * srcToDstShift;
+        const uint32_t dstRow = *(p_hi2ho++);
         uint16_t* restrict dstImageRow = reinterpret_cast<uint16_t*>(_outImage.m_ptr + dstRow*dstLineLength);
 
         targetPointsPerRow = 0;
         targetPointsCol = 0;
+        const uint32_t* restrict p_wi2wo = s_wi2wo;
         assert(m_inImageDesc.m_width % 32 == 0); // verified in setup
 #pragma MUST_ITERATE(32, ,32)
         for (uint32_t srcCol=0; srcCol < width; ++srcCol)
         {
-          const uint32_t dstCol    = srcCol * srcToDstShift;
+          const uint32_t dstCol    = *(p_wi2wo++);
           const uint64_t rgb888hsv = *rgb888hsvptr++;
           
           bool det = false;
@@ -341,8 +333,22 @@ class LineDetector<TRIK_VIDTRANSCODE_CV_VIDEO_FORMAT_YUV422P, TRIK_VIDTRANSCODE_
         return false;
 
       #define min(x,y) x < y ? x : y;
-      m_srcToDstShift = min(static_cast<double>(m_outImageDesc.m_width)/m_inImageDesc.m_width, 
-                            static_cast<double>(m_outImageDesc.m_height)/m_inImageDesc.m_height);
+      const double srcToDstShift = min(static_cast<double>(m_outImageDesc.m_width)/m_inImageDesc.m_width, 
+                                 static_cast<double>(m_outImageDesc.m_height)/m_inImageDesc.m_height);
+
+      const uint32_t widthIn  = _inImageDesc.m_width;
+      const uint32_t widthOut = _outImageDesc.m_width;
+      uint32_t* restrict p_wi2wo = s_wi2wo;
+      for(int i = 0; i < widthIn; i++) {
+          *(p_wi2wo++) = i*srcToDstShift;
+      }
+
+      const uint32_t heightIn  = _inImageDesc.m_height;
+      const uint32_t heightOut = _outImageDesc.m_height;
+      uint32_t* restrict p_hi2ho = s_hi2ho;
+      for(uint32_t i = 0; i < heightIn; i++) {
+          *(p_hi2ho++) = i*srcToDstShift;
+      }
 
       /* Static member initialization on first instance creation */
       if (s_mult43_div == NULL || s_mult255_div == NULL)
