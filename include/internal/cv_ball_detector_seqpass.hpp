@@ -21,6 +21,8 @@
 
 #warning Eliminate global var
 static uint64_t s_rgb888hsv[640*480];
+static uint32_t s_wi2wo[640];
+static uint32_t s_hi2ho[480];
 
 const int m_hueScale = 8;    // partition of axis h in 64 parts
 const int m_satScale = 64;   // s in 4 parts
@@ -79,10 +81,9 @@ class BallDetector<TRIK_VIDTRANSCODE_CV_VIDEO_FORMAT_YUV422P, TRIK_VIDTRANSCODE_
     {
       const int32_t srcCol = range<int32_t>(_srcColBot, _srcCol, _srcColTop);
       const int32_t srcRow = range<int32_t>(_srcRowBot, _srcRow, _srcRowTop);
-      const double srcToDstShift = m_srcToDstShift;
 
-      const int32_t dstRow = srcRow * srcToDstShift;
-      const int32_t dstCol = srcCol * srcToDstShift;
+      const int32_t dstRow = s_hi2ho[srcRow];
+      const int32_t dstCol = s_wi2wo[srcCol];
 
       const uint32_t dstOfs = dstRow*m_outImageDesc.m_lineLength + dstCol*sizeof(uint16_t);
       writeOutputPixel(reinterpret_cast<uint16_t*>(_outImage.m_ptr+dstOfs), _rgb888);
@@ -330,20 +331,21 @@ void clasterizeImage()
       const uint32_t width          = m_inImageDesc.m_width;
       const uint32_t height         = m_inImageDesc.m_height;
       const uint32_t dstLineLength  = m_outImageDesc.m_lineLength;
-      const /*uint32_t*/ double srcToDstShift  = m_srcToDstShift;
 
+      const uint32_t* restrict p_hi2ho = s_hi2ho;
       assert(m_inImageDesc.m_height % 4 == 0); // verified in setup
 #pragma MUST_ITERATE(4, ,4)
       for (uint32_t srcRow=0; srcRow < height; ++srcRow)
       {
-        const uint32_t dstRow = srcRow * srcToDstShift;
+        const uint32_t dstRow = *(p_hi2ho++);
         uint16_t* restrict dstImageRow = reinterpret_cast<uint16_t*>(_outImage.m_ptr + dstRow*dstLineLength);
 
+        const uint32_t* restrict p_wi2wo = s_wi2wo;
         assert(m_inImageDesc.m_width % 32 == 0); // verified in setup
 #pragma MUST_ITERATE(32, ,32)
         for (uint32_t srcCol=0; srcCol < width; ++srcCol)
         {
-          const uint32_t dstCol    = srcCol * srcToDstShift;
+          const uint32_t dstCol    = *(p_wi2wo++);
           const uint64_t rgb888hsv = *rgb888hsvptr++;
           writeOutputPixel(dstImageRow+dstCol, _hill(rgb888hsv));
         }
@@ -405,6 +407,45 @@ void clasterizeImage()
 
     return rgbResult;
   }
+/*
+  uint32_t __attribute__((always_inline)) GetImgColor2(uint16_t _m, uint16_t _n)
+  {
+    const uint64_t* restrict img = s_rgb888hsv;
+    const uint32_t width          = m_inImageDesc.m_width;
+    const uint32_t height         = m_inImageDesc.m_height;
+    const uint32_t dstLineLength  = m_outImageDesc.m_lineLength;
+
+    memset(c_color, 0, sizeof(int)*m_hueClsters*m_satClsters*m_valClsters);
+
+    for(int r = 0; r < height; r++)
+      for(int c = 0; c < width; c++) {
+        pixel.whole = _loll(*(img++));
+
+        ch = pixel.parts.h / m_hueScale;
+        cs = pixel.parts.s / m_satScale;
+        cv = pixel.parts.v / m_valScale;
+
+        c_color[ch][cs][cv]++;
+        if(c_color[ch][cs][cv] > maxColorEntry) {
+          maxColorEntry = c_color[ch][cs][cv];
+          ch_max = ch;
+          cs_max = cs;
+          cv_max = cv;
+        }
+      }
+
+    // return h, s and v as h_max, s_max and _max with values
+    // scaled to be between 0 and 255.
+    int hue = ch_max * m_hueScale;
+    int sat = cs_max * m_satScale;
+    int val = cv_max * m_valScale;
+
+    rgbResult = HSVtoRGB(hue, sat, val);
+
+    return rgbResult;
+  }
+*/
+
 
   void getTrueSV(double& rV, double& rS, double _v, double _s)
   {
@@ -486,16 +527,23 @@ void clasterizeImage()
           || m_inImageDesc.m_height % 4  != 0)
         return false;
 
-/*
-      for (m_srcToDstShift = 0; m_srcToDstShift < 32; ++m_srcToDstShift)
-        if (   (m_inImageDesc.m_width >>m_srcToDstShift) <= m_outImageDesc.m_width
-            && (m_inImageDesc.m_height>>m_srcToDstShift) <= m_outImageDesc.m_height)
-          break;
-*/
       #define min(x,y) x < y ? x : y;
-      m_srcToDstShift = min(static_cast<double>(m_outImageDesc.m_width)/m_inImageDesc.m_width, 
-                            static_cast<double>(m_outImageDesc.m_height)/m_inImageDesc.m_height);
+      const double srcToDstShift = min(static_cast<double>(m_outImageDesc.m_width)/m_inImageDesc.m_width, 
+                                 static_cast<double>(m_outImageDesc.m_height)/m_inImageDesc.m_height);
 
+      const uint32_t widthIn  = _inImageDesc.m_width;
+      const uint32_t widthOut = _outImageDesc.m_width;
+      uint32_t* restrict p_wi2wo = s_wi2wo;
+      for(int i = 0; i < widthIn; i++) {
+          *(p_wi2wo++) = i*srcToDstShift;
+      }
+
+      const uint32_t heightIn  = _inImageDesc.m_height;
+      const uint32_t heightOut = _outImageDesc.m_height;
+      uint32_t* restrict p_hi2ho = s_hi2ho;
+      for(uint32_t i = 0; i < heightIn; i++) {
+          *(p_hi2ho++) = i*srcToDstShift;
+      }
 
       /* Static member initialization on first instance creation */
       if (s_mult43_div == NULL || s_mult255_div == NULL)
