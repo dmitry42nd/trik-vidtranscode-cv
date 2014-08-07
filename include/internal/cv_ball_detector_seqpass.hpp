@@ -568,7 +568,7 @@ void clasterizeImage()
         std::fill(Y1.begin(), Y1.end(), m_outImageDesc.m_height);
         std::fill(Y2.begin(), Y2.end(), 0);
         std::fill(SIZE.begin(), SIZE.end(), 0);
-
+        m_targetPoints = 0;
 
         const uint64_t* restrict rgb888hsvptr = s_rgb888hsv;
         uint16_t* restrict dstImage = reinterpret_cast<uint16_t*>(_outImage.m_ptr);
