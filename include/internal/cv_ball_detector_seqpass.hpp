@@ -43,9 +43,9 @@ static int16_t s_xGrad[320*240+1];
 static int16_t s_yGrad[320*240+1];
 static int16_t s_gradMag[320*240+1];
 
-static uint16_t s_harrisScore[320*240];
+static uint16_t s_harrisScore[320*240+1];
 
-static uint8_t s_buffer[20]; //200
+static uint8_t s_buffer[200];
 
 static uint32_t s_wi2wo[640];
 static uint32_t s_hi2ho[480];
@@ -227,25 +227,30 @@ class BallDetector<TRIK_VIDTRANSCODE_CV_VIDEO_FORMAT_YUV422P, TRIK_VIDTRANSCODE_
         m_targetPoints += targetPointsPerRow;
       }
 
-/*
 //Harris corner detector
-      VLIB_xyGradientsAndMagnitude(reinterpret_cast<const uint8_t*>(_inImage.m_ptr), 
+      const uint8_t* restrict in1 = reinterpret_cast<const uint8_t*>(_inImage.m_ptr);
+      int16_t* restrict xgr = reinterpret_cast<int16_t*>(s_xGrad);
+      int16_t* restrict ygr = reinterpret_cast<int16_t*>(s_yGrad);
+      int16_t* restrict grm = reinterpret_cast<int16_t*>(s_gradMag);
+      VLIB_xyGradientsAndMagnitude(in1, 
+                                   xgr, 
+                                   ygr,
+                                   grm, width, height);
 
-                                   reinterpret_cast<int16_t*>(s_xGrad), 
-                                   reinterpret_cast<int16_t*>(s_yGrad),
-                                   reinterpret_cast<int16_t*>(s_gradMag), width, height);
-
-      VLIB_harrisScore_7x7(reinterpret_cast<const int16_t*>(s_xGrad),
-                           reinterpret_cast<const int16_t*>(s_yGrad),
+      const int16_t* restrict xgr2 = reinterpret_cast<int16_t*>(s_xGrad);
+      const int16_t* restrict ygr2 = reinterpret_cast<int16_t*>(s_yGrad);
+      int16_t* restrict hs1 = reinterpret_cast<int16_t*>(s_harrisScore);
+      uint8_t* restrict buffer = reinterpret_cast<uint8_t*>(s_buffer);
+      VLIB_harrisScore_7x7(xgr2,
+                           ygr2,
                            width, height,
-                           reinterpret_cast<int16_t*>(s_harrisScore),
+                           hs1,
                            2500, 
-                           reinterpret_cast<uint8_t*>(s_buffer));
+                           buffer);
 
       VLIB_nonMaxSuppress_7x7_S16(reinterpret_cast<const int16_t*>(s_harrisScore), 
                                   width, height, 17000, 
                                   reinterpret_cast<uint8_t*>(s_y3));
-*/
 
 //in_img to rgb565
       const short* restrict coeff = s_coeff;
