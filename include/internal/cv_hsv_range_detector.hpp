@@ -89,8 +89,8 @@ class HsvRangeDetector
     //penalty coeffs
     static const int K  = 200;
     static const int K0 = 10;
-    static const int K1 = 1; 
-    static const int K2 = 2; 
+    static const int K1 = 3; 
+    static const int K2 = 4; 
 
     const double T_end  = 0.0005;
     const double lambda = 0.76;
