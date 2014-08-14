@@ -278,7 +278,7 @@ class HsvRangeDetector
       C.s1 = (((C.s1+1) << pos_shift) - 1)*0.39f;
 */
       C.v0 = (C.v0 << pos_shift)*0.39f;
-      C.v1 = (((C.v1+1) << pos_shift) - 1)*0.39f;
+      C.v1 = (((C.v1+1) << pos_shift))*0.39f;
 /*
       if (C.h0 <= C.h1) {
         _h    = (C.h1 + C.h0) / 2;
