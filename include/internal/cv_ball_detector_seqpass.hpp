@@ -366,9 +366,9 @@ void clasterizeImage()
     }
 
   uint32_t __attribute__((always_inline)) GetImgColor(int _rowStart,
-                                                      int _widthStep,
+                                                      int _heightStep,
                                                       int _colStart,
-                                                      int _heightStep)
+                                                      int _widthStep)
   {
     uint32_t rgbResult = 0;
     const uint64_t* restrict img = s_rgb888hsv;
@@ -380,8 +380,8 @@ void clasterizeImage()
     int maxColorEntry = 0;
 
     U_Hsv8x3 pixel;
-    for(int row = _rowStart; row < _rowStart + _widthStep; row++)
-      for(int column = _colStart; column < _colStart + _heightStep; column++) {
+    for(int row = _rowStart; row < _rowStart + _heightStep; row++) {
+      for(int column = _colStart; column < _colStart + _widthStep; column++) {
         pixel.whole = _loll(img[row*m_inImageDesc.m_width + column]);
 
         ch = pixel.parts.h / m_hueScale;
@@ -396,6 +396,7 @@ void clasterizeImage()
           cv_max = cv;
         }
       }
+    }
 
     // return h, s and v as h_max, s_max and _max with values
     // scaled to be between 0 and 255.
@@ -403,27 +404,32 @@ void clasterizeImage()
     int sat = cs_max * m_satScale;
     int val = cv_max * m_valScale;
 
-    rgbResult = HSVtoRGB(hue, sat, val);
-
-    return rgbResult;
+    return HSVtoRGB(hue, sat, val);
   }
-/*
-  uint32_t __attribute__((always_inline)) GetImgColor2(uint16_t _m, uint16_t _n)
+  
+
+  uint32_t __attribute__((always_inline)) GetImgColor2(uint32_t _row, uint32_t _col, uint32_t _height, uint32_t _width)
   {
-    const uint64_t* restrict img = s_rgb888hsv;
-    const uint32_t width          = m_inImageDesc.m_width;
-    const uint32_t height         = m_inImageDesc.m_height;
-    const uint32_t dstLineLength  = m_outImageDesc.m_lineLength;
+    const uint32_t width = m_inImageDesc.m_width;
+    const uint32_t gap   = width - _width;
+    int ch, cs, cv;
+    int ch_max = 0;
+    int cs_max = 0;
+    int cv_max = 0;
+
+    int maxColorEntry = 0;
 
     memset(c_color, 0, sizeof(int)*m_hueClsters*m_satClsters*m_valClsters);
 
-    for(int r = 0; r < height; r++)
-      for(int c = 0; c < width; c++) {
-        pixel.whole = _loll(*(img++));
+    uint64_t* restrict subImg = s_rgb888hsv + _row*width + _col;
 
-        ch = pixel.parts.h / m_hueScale;
-        cs = pixel.parts.s / m_satScale;
-        cv = pixel.parts.v / m_valScale;
+    for(int row = 0; row < _height; row++) {
+      for(int col = 0; col < _width; col++) {
+        uint32_t pixel = _loll(*(subImg++));
+
+        ch = static_cast<uint8_t>(pixel)       / m_hueScale;
+        cs = static_cast<uint8_t>(pixel >> 8)  / m_satScale;
+        cv = static_cast<uint8_t>(pixel >> 16) / m_valScale;
 
         c_color[ch][cs][cv]++;
         if(c_color[ch][cs][cv] > maxColorEntry) {
@@ -433,6 +439,8 @@ void clasterizeImage()
           cv_max = cv;
         }
       }
+      subImg += gap;  
+    }
 
     // return h, s and v as h_max, s_max and _max with values
     // scaled to be between 0 and 255.
@@ -440,11 +448,8 @@ void clasterizeImage()
     int sat = cs_max * m_satScale;
     int val = cv_max * m_valScale;
 
-    rgbResult = HSVtoRGB(hue, sat, val);
-
-    return rgbResult;
+    return HSVtoRGB(hue, sat, val);
   }
-*/
 
 
   void getTrueSV(double& rV, double& rS, double _v, double _s)
@@ -604,7 +609,7 @@ void clasterizeImage()
       for(int i = 0; i < m_heightN; ++i) {
         int colStart = 0;
         for(int j = 0; j < m_widthM; ++j) {
-          resColor = GetImgColor(rowStart, m_heightStep, colStart, m_widthStep);
+          resColor = GetImgColor2(rowStart, colStart, m_heightStep, m_widthStep);
           fillImage(rowStart, colStart, _outImage, resColor);
           _outArgs.outColor[counter++] = resColor;
           colStart += m_widthStep;
