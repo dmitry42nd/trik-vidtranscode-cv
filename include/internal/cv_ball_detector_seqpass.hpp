@@ -22,20 +22,15 @@
 
 /* **** **** **** **** **** */ namespace cv /* **** **** **** **** **** */ {
 
-
-
 #warning Eliminate global var
-static uint64_t s_rgb888hsv[640*480];
-static uint16_t s_bitmap[640*480];
-static uint16_t s_clastermap[640*480];
-
+static uint64_t s_rgb888hsv[IMG_WIDTH_MAX*IMG_HEIGHT_MAX];
+static uint16_t s_bitmap[IMG_WIDTH_MAX*IMG_HEIGHT_MAX];
+static uint16_t s_clastermap[IMG_WIDTH_MAX*IMG_HEIGHT_MAX];
 
 template <>
 class BallDetector<TRIK_VIDTRANSCODE_CV_VIDEO_FORMAT_YUV422, TRIK_VIDTRANSCODE_CV_VIDEO_FORMAT_RGB565X> : public CVAlgorithm
 {
   private:
-    static const int OBJECTS_NUM = 4;
-
     static const int m_detectZoneScale = 6;
 
     uint64_t m_detectRange;
@@ -51,15 +46,16 @@ class BallDetector<TRIK_VIDTRANSCODE_CV_VIDEO_FORMAT_YUV422, TRIK_VIDTRANSCODE_C
     std::vector<int32_t>  Y1, Y2;
     std::vector<uint32_t> SIZE;
 
-    BitmapBuilder m_bitmapBuilder;
-    Clasterizer   m_clasterizer;
-
     TrikCvImageDesc m_inImageDesc;
     TrikCvImageDesc m_outImageDesc;
 
+    TrikCvImageDesc m_bitmapDesc;
+    BitmapBuilder   m_bitmapBuilder;
+
+    TrikCvImageDesc m_clastermapDesc;
+    Clasterizer     m_clasterizer;
+
     TrikCvImageDesc inRgb888HsvImgDesc;
-    TrikCvImageDesc bitmapDesc;
-    TrikCvImageDesc clastermapDesc;
 
     static uint16_t* restrict s_mult43_div;  // allocated from fast ram
     static uint16_t* restrict s_mult255_div; // allocated from fast ram
@@ -356,79 +352,6 @@ class BallDetector<TRIK_VIDTRANSCODE_CV_VIDEO_FORMAT_YUV422, TRIK_VIDTRANSCODE_C
       }
     }
 
-void clasterizePixel(const uint32_t _hsv)
-{
-}
-
-void clasterizeImage()
-{
-      const uint64_t* restrict rgb888hsvptr = s_rgb888hsv;
-      const uint32_t width          = m_inImageDesc.m_width;
-      const uint32_t height         = m_inImageDesc.m_height;
-
-      const uint64_t u64_hsv_range  = m_detectRange;
-      const uint32_t u32_hsv_expect = m_detectExpected;
-
-      assert(m_inImageDesc.m_height % 4 == 0); // verified in setup
-#pragma MUST_ITERATE(4, ,4)
-      for (uint32_t srcRow=0; srcRow < height; ++srcRow)
-      {
-
-        assert(m_inImageDesc.m_width % 32 == 0); // verified in setup
-#pragma MUST_ITERATE(32, ,32)
-        for (uint32_t srcCol=0; srcCol < width; ++srcCol)
-        {
-          const uint64_t rgb888hsv = *rgb888hsvptr++;
-          clasterizePixel(rgb888hsv);
-          const bool det = detectHsvPixel(_loll(rgb888hsv), u64_hsv_range, u32_hsv_expect);
-
-        }
-      }
-}
-
-    void DEBUG_INLINE proceedImageHsv(TrikCvImageBuffer& _outImage)
-    {
-      const uint64_t* restrict rgb888hsvptr = s_rgb888hsv;
-      //const uint16_t* restrict bitmapptr = s_bitmap;
-      const uint32_t width          = m_inImageDesc.m_width;
-      const uint32_t height         = m_inImageDesc.m_height;
-      const uint32_t dstLineLength  = m_outImageDesc.m_lineLength;
-      const uint32_t srcToDstShift  = m_srcToDstShift;
-      const uint64_t u64_hsv_range  = m_detectRange;
-      const uint32_t u32_hsv_expect = m_detectExpected;
-      uint32_t targetPointsPerRow;
-      uint32_t targetPointsCol;
-
-      assert(m_inImageDesc.m_height % 4 == 0); // verified in setup
-#pragma MUST_ITERATE(4, ,4)
-      for (uint32_t srcRow=0; srcRow < height; ++srcRow)
-      {
-        const uint32_t dstRow = srcRow >> srcToDstShift;
-        uint16_t* restrict dstImageRow = reinterpret_cast<uint16_t*>(_outImage.m_ptr + dstRow*dstLineLength);
-
-        uint16_t* restrict bitmapRow = reinterpret_cast<uint16_t*>(s_bitmap + (dstRow >> 2)*bitmapDesc.m_lineLength);;
-
-        targetPointsPerRow = 0;
-        targetPointsCol = 0;
-        assert(m_inImageDesc.m_width % 32 == 0); // verified in setup
-#pragma MUST_ITERATE(32, ,32)
-        for (uint32_t srcCol=0; srcCol < width; ++srcCol)
-        {
-          const uint32_t dstCol    = srcCol >> srcToDstShift;
-          const uint64_t rgb888hsv = *rgb888hsvptr++;
-          const uint16_t bitmap = *(bitmapRow + (dstCol >> 2));
-
-          const bool det = (pop(bitmap) > 3);
-          targetPointsPerRow += det;
-          targetPointsCol += det?srcCol:0;
-          writeOutputPixel(dstImageRow+dstCol, det?0x00ffff:_hill(rgb888hsv));
-        }
-        m_targetX      += targetPointsCol;
-        m_targetY      += srcRow*targetPointsPerRow;
-        m_targetPoints += targetPointsPerRow;
-      }
-    }
-
 
     uint16_t max(std::vector<uint32_t> t)
     {
@@ -487,23 +410,20 @@ void clasterizeImage()
         }
       }
 
-      inRgb888HsvImgDesc.m_width = 320;
-      inRgb888HsvImgDesc.m_height = 240;
-      inRgb888HsvImgDesc.m_lineLength = 320*sizeof(uint64_t);
+      inRgb888HsvImgDesc.m_width = m_inImageDesc.m_width;
+      inRgb888HsvImgDesc.m_height = m_inImageDesc.m_height;
+      inRgb888HsvImgDesc.m_lineLength = m_inImageDesc.m_width*sizeof(uint64_t);
       inRgb888HsvImgDesc.m_format = TRIK_VIDTRANSCODE_CV_VIDEO_FORMAT_RGB888HSV;
       
-      bitmapDesc.m_width = 320/4;
-      bitmapDesc.m_height = 240/4;
-      bitmapDesc.m_lineLength = (320/4)*sizeof(uint16_t);
-      bitmapDesc.m_format = TRIK_VIDTRANSCODE_CV_VIDEO_FORMAT_METABITMAP;
+      m_bitmapDesc.m_width = m_inImageDesc.m_width/METAPIX_SIZE;
+      m_bitmapDesc.m_height = m_inImageDesc.m_height/METAPIX_SIZE;
+      m_bitmapDesc.m_lineLength = m_bitmapDesc.m_width*sizeof(uint16_t);
+      m_bitmapDesc.m_format = TRIK_VIDTRANSCODE_CV_VIDEO_FORMAT_METABITMAP;
 
-      clastermapDesc.m_width = 320/4;
-      clastermapDesc.m_height = 240/4;
-      clastermapDesc.m_lineLength = 320/4;
-      clastermapDesc.m_format = TRIK_VIDTRANSCODE_CV_VIDEO_FORMAT_METABITMAP;
+      m_clastermapDesc = m_bitmapDesc; //i suppose
 
-      m_bitmapBuilder.setup(inRgb888HsvImgDesc, bitmapDesc, _fastRam, _fastRamSize);
-      m_clasterizer.setup(bitmapDesc, clastermapDesc, _fastRam, _fastRamSize);
+      m_bitmapBuilder.setup(inRgb888HsvImgDesc, m_bitmapDesc, _fastRam, _fastRamSize);
+      m_clasterizer.setup(m_bitmapDesc, m_clastermapDesc, _fastRam, _fastRamSize);
 
       return true;
     }
@@ -519,8 +439,8 @@ void clasterizeImage()
 
       bool autoDetectHsv = static_cast<bool>(_inArgs.autoDetectHsv); // true or false
 
-      memset(s_clastermap, 0xff, 640*480*2);
-      memset(s_bitmap, 0x00, 640*480*2);
+      memset(s_clastermap, 0xff, m_clastermapDesc.m_width*m_clastermapDesc.m_height*sizeof(uint16_t));
+      memset(s_bitmap, 0x00, m_bitmapDesc.m_width*m_bitmapDesc.m_height*sizeof(uint16_t));
 
 #ifdef DEBUG_REPEAT
       for (unsigned repeat = 0; repeat < DEBUG_REPEAT; ++repeat) {
@@ -541,16 +461,15 @@ void clasterizeImage()
 
         TrikCvImageBuffer inRgb888HsvImg;
         inRgb888HsvImg.m_ptr = reinterpret_cast<TrikCvImagePtr>(s_rgb888hsv);
-        inRgb888HsvImg.m_size = 640*480*8;
+        inRgb888HsvImg.m_size = IMG_WIDTH_MAX*IMG_HEIGHT_MAX*sizeof(uint64_t);
 
         TrikCvImageBuffer bitmap;
         bitmap.m_ptr = reinterpret_cast<TrikCvImagePtr>(s_bitmap);
-        bitmap.m_size = 640*480*2;
+        bitmap.m_size = IMG_WIDTH_MAX*IMG_HEIGHT_MAX*sizeof(uint16_t);
 
         TrikCvImageBuffer clastermap;
         clastermap.m_ptr = reinterpret_cast<TrikCvImagePtr>(s_clastermap);
-        clastermap.m_size = 640*480*2;
-
+        clastermap.m_size = IMG_WIDTH_MAX*IMG_HEIGHT_MAX*sizeof(uint16_t);
 
         m_bitmapBuilder.run(inRgb888HsvImg, bitmap, _inArgs, _outArgs);
         m_clasterizer.run(bitmap, clastermap, _inArgs, _outArgs);
@@ -585,7 +504,7 @@ void clasterizeImage()
   #pragma MUST_ITERATE(4, ,4)
         for (uint32_t dstRow=0; dstRow < height; ++dstRow)
         {
-          uint16_t* restrict clastermapRow = reinterpret_cast<uint16_t*>(s_clastermap + (dstRow >> 2)*clastermapDesc.m_width);
+          uint16_t* restrict clastermapRow = reinterpret_cast<uint16_t*>(s_clastermap + (dstRow >> 2)*m_clastermapDesc.m_width);
 
           targetPointsPerRow = 0;
           targetPointsCol = 0;
@@ -648,7 +567,7 @@ void clasterizeImage()
       if (m_targetPoints > 0)
       {
         assert(m_inImageDesc.m_height > 0 && m_inImageDesc.m_width > 0); // more or less safe since no target points would be detected otherwise        
-        for(int i = 0; i < OBJECTS_NUM; i++)
+        for(int i = 0; i < OBJECTS; i++)
         {
             int j = max(SIZE);
             if(SIZE[j]>10)

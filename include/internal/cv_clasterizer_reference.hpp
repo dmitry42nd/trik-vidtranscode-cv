@@ -21,9 +21,6 @@
 class Clasterizer : public CVAlgorithm
 {
   private:
-    const uint16_t NO_CLASTER = 0xFFFF;
-    const uint16_t ENV_PIXS_NUM = 4;
-
     TrikCvImageDesc m_inImageDesc;
     TrikCvImageDesc m_outImageDesc;
 
@@ -31,28 +28,15 @@ class Clasterizer : public CVAlgorithm
     std::vector<uint16_t> directEqualClasters;
     std::vector<uint16_t> clastersMass;
 
-    uint16_t m_currentMaxClasterNum;
+    uint16_t m_maxClaster;
 
-
-    uint16_t pop(uint16_t x)
-    {
-      x = x - ((x >> 1) & 0x5555);
-      x = (x & 0x3333) + ((x >> 2) & 0x3333);
-      x = (x + (x >> 4)) & 0x0f0f;
-      x = x + (x >> 8);
-      x = x + (x >> 16);
-
-      return x & 0x003f;
-    }
-
-
-    uint16_t min(uint16_t** envPixs)
+    uint16_t min(uint16_t* envPixs)
     {
       uint16_t min = NO_CLASTER;
 
       #pragma MUST_ITERATE(4,,4)
-      for(int i = 0; i < ENV_PIXS_NUM; i++)
-          min = *(envPixs[i]) < min ? *(envPixs[i]) : min;
+      for(int i = 0; i < ENV_PIXS; i++)
+          min = envPixs[i] < min ? envPixs[i] : min;
 
         return min;
     }
@@ -82,7 +66,7 @@ class Clasterizer : public CVAlgorithm
 
     bool justOneClaster(uint16_t** envPixs, uint16_t clasterValue)
     {
-      for(int i = 0; i < ENV_PIXS_NUM; i++)
+      for(int i = 0; i < ENV_PIXS; i++)
         if (*envPixs[i] != NO_CLASTER && *envPixs[i] != clasterValue)
           return false;
 
@@ -90,56 +74,53 @@ class Clasterizer : public CVAlgorithm
     }
 
 
-    void setPixelEnvironment(uint16_t* pixPtr, uint16_t** a1, uint16_t** a2, uint16_t** a3, uint16_t** a4, int r, int c)
+/*
+ ________
+|a2|a3|a4|
+|a1|p |  |
+|  |  |  |
+ --------
+*/
+
+    void setPixelEnvironment(uint16_t* pixPtr, uint16_t* a, int r, int c)
     {
       const uint32_t width = m_inImageDesc.m_width;
 
       if(r != 0)
       {
-        *(a3) = pixPtr - width;
+        a[2] = *(pixPtr - width);
         if(c != 0)
-          *(a2) = *(a3) - 1;
+          a[1] = *(pixPtr - width - 1);
         if(c != width - 1)
-          *(a4) = *(a3) + 1;
+          a[3] = *(pixPtr - width + 1);
       }
 
       if(c != 0)
-        *(a1) = pixPtr - 1;
+        a[0] = *(pixPtr - 1);
     }
+
 
     void setClasterNum(uint16_t* pixPtr, int r, int c)
     {
-        uint16_t localMinClasterNum = NO_CLASTER;
-        uint16_t* a[ENV_PIXS_NUM];
-    
-        //some kind of init by NO_CLASTER for environment pixels
-        #pragma MUST_ITERATE(4,,4)
-        for (int i =0 ; i < ENV_PIXS_NUM; i++)
-            a[i] = &(localMinClasterNum);
+        uint16_t localMinClaster = NO_CLASTER;
 
-        setPixelEnvironment(pixPtr, &(a[0]), &(a[1]), &(a[2]), &(a[3]), r, c);
+        uint16_t a[ENV_PIXS];
+        memset(a, 0xff, ENV_PIXS*sizeof(uint16_t));
+        setPixelEnvironment(pixPtr, a, r, c);
 
-        if((localMinClasterNum = min(a)) == NO_CLASTER)
-        {
-            equalClasters.resize(m_currentMaxClasterNum + 1);
-            equalClasters[m_currentMaxClasterNum] = m_currentMaxClasterNum;
-            *pixPtr = m_currentMaxClasterNum++;
+        if((localMinClaster = min(a)) == NO_CLASTER) {
+          *pixPtr = m_maxClaster;
+          equalClasters.push_back(m_maxClaster++);
+        } else {
+          *pixPtr = localMinClaster;
+
+          #pragma MUST_ITERATE(4,,4)
+          for(int i = 0; i < ENV_PIXS; i++)
+            if((a[i] != NO_CLASTER) && (a[i] != localMinClaster))
+              if(!isClastersEqual(localMinClaster, a[i]))
+                linkClasters(localMinClaster, a[i]);
         }
-        else if(justOneClaster(a, localMinClasterNum))
-        {
-            *pixPtr = localMinClasterNum;
-        }
-        else
-        {
-            *pixPtr = localMinClasterNum;
 
-            #pragma MUST_ITERATE(4,,4)
-            for(int i = 0; i < ENV_PIXS_NUM; i++)
-                if(*(a[i]) != NO_CLASTER && *(a[i]) != localMinClasterNum)
-                    if(!isClastersEqual(localMinClasterNum, *a[i]))
-                        linkClasters(localMinClasterNum, *a[i]);
-
-        }
     }
 
 
@@ -205,35 +186,23 @@ class Clasterizer : public CVAlgorithm
         return false;
       _outImage.m_size = m_outImageDesc.m_height * m_outImageDesc.m_lineLength;
 
-      m_currentMaxClasterNum = 1;
+      m_maxClaster = 1;
       equalClasters.resize(1);
-      directEqualClasters.resize(1);
 
-#ifdef DEBUG_REPEAT
-      for (unsigned repeat = 0; repeat < DEBUG_REPEAT; ++repeat) {
-#endif
+      const uint16_t* restrict srcImgPtr = reinterpret_cast<uint16_t*>(_inImage.m_ptr);
+      uint16_t* restrict dstImgPtr = reinterpret_cast<uint16_t*>(_outImage.m_ptr);
 
-      for (int dstRow = 0; dstRow < m_inImageDesc.m_height; dstRow++)
-      {
-        const int dstRowOffset = dstRow*m_inImageDesc.m_lineLength;
-        uint16_t* restrict dstImgPtr = reinterpret_cast<uint16_t*>(_outImage.m_ptr + dstRowOffset);
-        uint16_t* restrict srcImgPtr = reinterpret_cast<uint16_t*>(_inImage.m_ptr + dstRowOffset);
+      for (int srcRow = 0; srcRow < m_inImageDesc.m_height; srcRow++) {
+        for (int srcCol = 0; srcCol < m_inImageDesc.m_width; srcCol++) {
+          if(pop(*(srcImgPtr++)) > 3) {
+            setClasterNum(dstImgPtr, srcRow, srcCol);
+          }
 
-        for (int dstCol = 0; dstCol < m_inImageDesc.m_width; dstCol++)
-        {
-          if(pop(*srcImgPtr) > 3)
-            setClasterNum(dstImgPtr, dstRow, dstCol);
-
-          srcImgPtr++;
-          dstImgPtr++;
+          dstImgPtr++; //cause we use addres of dstImgPtr in setClasterNum()
         }
       }
 
       setMinEqClasters();
-
-#ifdef DEBUG_REPEAT
-      } // repeat
-#endif
     }
 };
 

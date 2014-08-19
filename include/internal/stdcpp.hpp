@@ -10,6 +10,15 @@
 
 /* **** **** **** **** **** */ namespace trik /* **** **** **** **** **** */ {
 
+#define IMG_WIDTH_MAX 640
+#define IMG_HEIGHT_MAX 480
+
+#define OBJECTS      4
+#define METAPIX_SIZE 4
+
+#define ENV_PIXS     4
+#define NO_CLASTER   0xFFFF
+
 
 class noncopyable
 {
