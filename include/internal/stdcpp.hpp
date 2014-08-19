@@ -17,7 +17,7 @@
 #define METAPIX_SIZE 4
 
 #define ENV_PIXS     4
-#define NO_CLASTER   0xFFFF
+#define NO_CLUSTER   0xFFFF
 
 
 class noncopyable

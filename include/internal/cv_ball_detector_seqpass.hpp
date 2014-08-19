@@ -15,7 +15,7 @@
 #include "trik_vidtranscode_cv.h"
 #include "internal/cv_hsv_range_detector.hpp"
 #include "internal/cv_bitmap_builder.hpp"
-#include "internal/cv_clasterizer.hpp"
+#include "internal/cv_clusterizer.hpp"
 
 
 /* **** **** **** **** **** */ namespace trik /* **** **** **** **** **** */ {
@@ -25,7 +25,12 @@
 #warning Eliminate global var
 static uint64_t s_rgb888hsv[IMG_WIDTH_MAX*IMG_HEIGHT_MAX];
 static uint16_t s_bitmap[IMG_WIDTH_MAX*IMG_HEIGHT_MAX];
-static uint16_t s_clastermap[IMG_WIDTH_MAX*IMG_HEIGHT_MAX];
+static uint16_t s_clustermap[IMG_WIDTH_MAX*IMG_HEIGHT_MAX];
+
+static uint32_t s_wi2wo_out[IMG_WIDTH_MAX];
+static uint32_t s_hi2ho_out[IMG_HEIGHT_MAX];
+static uint32_t s_wi2wo_cstr[IMG_WIDTH_MAX];
+static uint32_t s_hi2ho_cstr[IMG_HEIGHT_MAX];
 
 template <>
 class BallDetector<TRIK_VIDTRANSCODE_CV_VIDEO_FORMAT_YUV422, TRIK_VIDTRANSCODE_CV_VIDEO_FORMAT_RGB565X> : public CVAlgorithm
@@ -35,27 +40,29 @@ class BallDetector<TRIK_VIDTRANSCODE_CV_VIDEO_FORMAT_YUV422, TRIK_VIDTRANSCODE_C
 
     uint64_t m_detectRange;
     uint32_t m_detectExpected;
-    uint32_t m_srcToDstShift;
 
     int32_t  m_targetX;
     int32_t  m_targetY;
     uint32_t m_targetPoints;
-
-    uint16_t m_clastersAmount;
+//--------------
+    uint16_t m_clustersAmount;
     std::vector<int32_t>  X1, X2;
     std::vector<int32_t>  Y1, Y2;
     std::vector<uint32_t> SIZE;
-
+//--------------
     TrikCvImageDesc m_inImageDesc;
     TrikCvImageDesc m_outImageDesc;
 
     TrikCvImageDesc m_bitmapDesc;
     BitmapBuilder   m_bitmapBuilder;
+    TrikCvImageBuffer m_bitmap;
 
-    TrikCvImageDesc m_clastermapDesc;
-    Clasterizer     m_clasterizer;
+    TrikCvImageDesc m_clustermapDesc;
+    Clusterizer     m_clusterizer;
+    TrikCvImageBuffer m_clustermap;
 
     TrikCvImageDesc inRgb888HsvImgDesc;
+    TrikCvImageBuffer m_inRgb888HsvImg;
 
     static uint16_t* restrict s_mult43_div;  // allocated from fast ram
     static uint16_t* restrict s_mult255_div; // allocated from fast ram
@@ -86,8 +93,8 @@ class BallDetector<TRIK_VIDTRANSCODE_CV_VIDEO_FORMAT_YUV422, TRIK_VIDTRANSCODE_C
       const int32_t srcCol = range<int32_t>(_srcColBot, _srcCol, _srcColTop);
       const int32_t srcRow = range<int32_t>(_srcRowBot, _srcRow, _srcRowTop);
 
-      const int32_t dstRow = srcRow >> m_srcToDstShift;
-      const int32_t dstCol = srcCol >> m_srcToDstShift;
+      const int32_t dstRow = s_hi2ho_out[srcRow];
+      const int32_t dstCol = s_wi2wo_out[srcCol];
 
       const uint32_t dstOfs = dstRow*m_outImageDesc.m_lineLength + dstCol*sizeof(uint16_t);
       writeOutputPixel(reinterpret_cast<uint16_t*>(_outImage.m_ptr+dstOfs), _rgb888);
@@ -352,7 +359,6 @@ class BallDetector<TRIK_VIDTRANSCODE_CV_VIDEO_FORMAT_YUV422, TRIK_VIDTRANSCODE_C
       }
     }
 
-
     uint16_t max(std::vector<uint32_t> t)
     {
       uint16_t max = 0;
@@ -371,6 +377,59 @@ class BallDetector<TRIK_VIDTRANSCODE_CV_VIDEO_FORMAT_YUV422, TRIK_VIDTRANSCODE_C
     }
 
 
+    void DEBUG_INLINE proceedImageHsv(TrikCvImageBuffer& _outImage)
+    {
+        const uint64_t* restrict rgb888hsvptr = s_rgb888hsv;
+
+        const uint32_t width          = m_inImageDesc.m_width;
+        const uint32_t height         = m_inImageDesc.m_height;
+        const uint32_t dstLineLength  = m_outImageDesc.m_lineLength;
+
+        uint32_t targetPointsPerRow;
+        uint32_t targetPointsCol;
+
+        const uint32_t* restrict p_hi2ho_out = s_hi2ho_out;
+        const uint32_t* restrict p_hi2ho_cstr = s_hi2ho_cstr;
+        assert(m_outImageDesc.m_height % 4 == 0); // verified in setup
+  #pragma MUST_ITERATE(4, ,4)
+        for (uint32_t srcRow=0; srcRow < height; srcRow++) {
+          const uint32_t dstRow = *(p_hi2ho_out++);
+          const uint32_t cstrRow = *(p_hi2ho_cstr++);
+
+          uint16_t* restrict dstImageRow = reinterpret_cast<uint16_t*>(_outImage.m_ptr + dstRow*dstLineLength);
+          uint16_t* restrict clustermapRow = reinterpret_cast<uint16_t*>(s_clustermap + cstrRow*m_clustermapDesc.m_width);
+
+          targetPointsPerRow = 0;
+          targetPointsCol = 0;
+
+          const uint32_t* restrict p_wi2wo_out = s_wi2wo_out;
+          const uint32_t* restrict p_wi2wo_cstr = s_wi2wo_cstr;
+          #pragma MUST_ITERATE(32, ,32)
+          for (uint32_t srcCol=0; srcCol < width; srcCol++) {
+            const uint32_t dstCol    = *(p_wi2wo_out++);
+            const uint32_t cstrCol   = *(p_wi2wo_cstr++);
+            const uint64_t rgb888hsv = *rgb888hsvptr++;
+
+            uint16_t clusterNum = m_clusterizer.getMinEqCluster(*(clustermapRow + cstrCol));
+            const bool det = (clusterNum < 0xFFFF);
+            targetPointsPerRow += det;
+
+            if(det)
+            {
+              X1[clusterNum] = X1[clusterNum] < dstCol ? X1[clusterNum] : dstCol;
+              X2[clusterNum] = X2[clusterNum] > dstCol ? X2[clusterNum] : dstCol;
+              Y1[clusterNum] = Y1[clusterNum] < dstRow ? Y1[clusterNum] : dstRow;
+              Y2[clusterNum] = Y2[clusterNum] > dstRow ? Y2[clusterNum] : dstRow;
+            }
+
+            writeOutputPixel(dstImageRow+dstCol, det?0x00ffff:_hill(rgb888hsv));
+          }
+          m_targetPoints += targetPointsPerRow;
+        }
+    }
+
+
+
   public:
     virtual bool setup(const TrikCvImageDesc& _inImageDesc,
                        const TrikCvImageDesc& _outImageDesc,
@@ -379,16 +438,63 @@ class BallDetector<TRIK_VIDTRANSCODE_CV_VIDEO_FORMAT_YUV422, TRIK_VIDTRANSCODE_C
       m_inImageDesc  = _inImageDesc;
       m_outImageDesc = _outImageDesc;
 
+      inRgb888HsvImgDesc.m_width = m_inImageDesc.m_width;
+      inRgb888HsvImgDesc.m_height = m_inImageDesc.m_height;
+      inRgb888HsvImgDesc.m_lineLength = m_inImageDesc.m_width*sizeof(uint64_t);
+      inRgb888HsvImgDesc.m_format = TRIK_VIDTRANSCODE_CV_VIDEO_FORMAT_RGB888HSV;
+      
+      m_bitmapDesc.m_width = m_inImageDesc.m_width/METAPIX_SIZE;
+      m_bitmapDesc.m_height = m_inImageDesc.m_height/METAPIX_SIZE;
+      m_bitmapDesc.m_lineLength = m_bitmapDesc.m_width*sizeof(uint16_t);
+      m_bitmapDesc.m_format = TRIK_VIDTRANSCODE_CV_VIDEO_FORMAT_METABITMAP;
+
+      m_clustermapDesc = m_bitmapDesc; //i suppose
+
+      m_bitmapBuilder.setup(inRgb888HsvImgDesc, m_bitmapDesc, _fastRam, _fastRamSize);
+      m_clusterizer.setup(m_bitmapDesc, m_clustermapDesc, _fastRam, _fastRamSize);
+
+      m_inRgb888HsvImg.m_ptr = reinterpret_cast<TrikCvImagePtr>(s_rgb888hsv);
+      m_inRgb888HsvImg.m_size = IMG_WIDTH_MAX*IMG_HEIGHT_MAX*sizeof(uint64_t);
+
+      m_bitmap.m_ptr = reinterpret_cast<TrikCvImagePtr>(s_bitmap);
+      m_bitmap.m_size = IMG_WIDTH_MAX*IMG_HEIGHT_MAX*sizeof(uint16_t);
+
+      m_clustermap.m_ptr = reinterpret_cast<TrikCvImagePtr>(s_clustermap);
+      m_clustermap.m_size = IMG_WIDTH_MAX*IMG_HEIGHT_MAX*sizeof(uint16_t);
+
       if (   m_inImageDesc.m_width < 0
           || m_inImageDesc.m_height < 0
           || m_inImageDesc.m_width  % 32 != 0
           || m_inImageDesc.m_height % 4  != 0)
         return false;
 
-      for (m_srcToDstShift = 0; m_srcToDstShift < 32; ++m_srcToDstShift)
-        if (   (m_inImageDesc.m_width >>m_srcToDstShift) <= m_outImageDesc.m_width
-            && (m_inImageDesc.m_height>>m_srcToDstShift) <= m_outImageDesc.m_height)
-          break;
+      #define min(x,y) x < y ? x : y;
+      const double srcToDstShift = min(static_cast<double>(m_outImageDesc.m_width)/m_inImageDesc.m_width, 
+                                 static_cast<double>(m_outImageDesc.m_height)/m_inImageDesc.m_height);
+
+      const uint32_t widthIn  = _inImageDesc.m_width;
+      //width step for out image
+      uint32_t* restrict p_wi2wo_out = s_wi2wo_out;
+      for(int i = 0; i < widthIn; i++) {
+          *(p_wi2wo_out++) = i*srcToDstShift;
+      }
+      //width step for cluster map
+      uint32_t* restrict p_wi2wo_cstr = s_wi2wo_cstr;
+      for(int i = 0; i < widthIn; i++) {
+          *(p_wi2wo_cstr++) = i/METAPIX_SIZE;
+      }
+
+      const uint32_t heightIn  = _inImageDesc.m_height;
+      //height step for out image
+      uint32_t* restrict p_hi2ho_out = s_hi2ho_out;
+      for(uint32_t i = 0; i < heightIn; i++) {
+          *(p_hi2ho_out++) = i*srcToDstShift;
+      }
+      //height step for cluster map
+      uint32_t* restrict p_hi2ho_cstr = s_hi2ho_cstr;
+      for(uint32_t i = 0; i < heightIn; i++) {
+          *(p_hi2ho_cstr++) = i/METAPIX_SIZE;
+      }
 
       /* Static member initialization on first instance creation */
       if (s_mult43_div == NULL || s_mult255_div == NULL)
@@ -410,21 +516,6 @@ class BallDetector<TRIK_VIDTRANSCODE_CV_VIDEO_FORMAT_YUV422, TRIK_VIDTRANSCODE_C
         }
       }
 
-      inRgb888HsvImgDesc.m_width = m_inImageDesc.m_width;
-      inRgb888HsvImgDesc.m_height = m_inImageDesc.m_height;
-      inRgb888HsvImgDesc.m_lineLength = m_inImageDesc.m_width*sizeof(uint64_t);
-      inRgb888HsvImgDesc.m_format = TRIK_VIDTRANSCODE_CV_VIDEO_FORMAT_RGB888HSV;
-      
-      m_bitmapDesc.m_width = m_inImageDesc.m_width/METAPIX_SIZE;
-      m_bitmapDesc.m_height = m_inImageDesc.m_height/METAPIX_SIZE;
-      m_bitmapDesc.m_lineLength = m_bitmapDesc.m_width*sizeof(uint16_t);
-      m_bitmapDesc.m_format = TRIK_VIDTRANSCODE_CV_VIDEO_FORMAT_METABITMAP;
-
-      m_clastermapDesc = m_bitmapDesc; //i suppose
-
-      m_bitmapBuilder.setup(inRgb888HsvImgDesc, m_bitmapDesc, _fastRam, _fastRamSize);
-      m_clasterizer.setup(m_bitmapDesc, m_clastermapDesc, _fastRam, _fastRamSize);
-
       return true;
     }
 
@@ -439,7 +530,7 @@ class BallDetector<TRIK_VIDTRANSCODE_CV_VIDEO_FORMAT_YUV422, TRIK_VIDTRANSCODE_C
 
       bool autoDetectHsv = static_cast<bool>(_inArgs.autoDetectHsv); // true or false
 
-      memset(s_clastermap, 0xff, m_clastermapDesc.m_width*m_clastermapDesc.m_height*sizeof(uint16_t));
+      memset(s_clustermap, 0xff, m_clustermapDesc.m_width*m_clustermapDesc.m_height*sizeof(uint16_t));
       memset(s_bitmap, 0x00, m_bitmapDesc.m_width*m_bitmapDesc.m_height*sizeof(uint16_t));
 
 #ifdef DEBUG_REPEAT
@@ -459,28 +550,17 @@ class BallDetector<TRIK_VIDTRANSCODE_CV_VIDEO_FORMAT_YUV422, TRIK_VIDTRANSCODE_C
                                s_rgb888hsv);
         }
 
-        TrikCvImageBuffer inRgb888HsvImg;
-        inRgb888HsvImg.m_ptr = reinterpret_cast<TrikCvImagePtr>(s_rgb888hsv);
-        inRgb888HsvImg.m_size = IMG_WIDTH_MAX*IMG_HEIGHT_MAX*sizeof(uint64_t);
+        m_bitmapBuilder.run(m_inRgb888HsvImg, m_bitmap, _inArgs, _outArgs);
+        m_clusterizer.run(m_bitmap, m_clustermap, _inArgs, _outArgs);
 
-        TrikCvImageBuffer bitmap;
-        bitmap.m_ptr = reinterpret_cast<TrikCvImagePtr>(s_bitmap);
-        bitmap.m_size = IMG_WIDTH_MAX*IMG_HEIGHT_MAX*sizeof(uint16_t);
+        m_clustersAmount = m_clusterizer.getClustersAmount();
 
-        TrikCvImageBuffer clastermap;
-        clastermap.m_ptr = reinterpret_cast<TrikCvImagePtr>(s_clastermap);
-        clastermap.m_size = IMG_WIDTH_MAX*IMG_HEIGHT_MAX*sizeof(uint16_t);
 
-        m_bitmapBuilder.run(inRgb888HsvImg, bitmap, _inArgs, _outArgs);
-        m_clasterizer.run(bitmap, clastermap, _inArgs, _outArgs);
-
-        m_clastersAmount = m_clasterizer.getClastersAmount();
-
-        X1.resize(m_clastersAmount);
-        X2.resize(m_clastersAmount);
-        Y1.resize(m_clastersAmount);
-        Y2.resize(m_clastersAmount);
-        SIZE.resize(m_clastersAmount);
+        X1.resize(m_clustersAmount);
+        X2.resize(m_clustersAmount);
+        Y1.resize(m_clustersAmount);
+        Y2.resize(m_clustersAmount);
+        SIZE.resize(m_clustersAmount);
 
         std::fill(X1.begin(), X1.end(), m_outImageDesc.m_width);
         std::fill(X2.begin(), X2.end(), 0);
@@ -489,48 +569,7 @@ class BallDetector<TRIK_VIDTRANSCODE_CV_VIDEO_FORMAT_YUV422, TRIK_VIDTRANSCODE_C
         std::fill(SIZE.begin(), SIZE.end(), 0);
         m_targetPoints = 0;
 
-        const uint64_t* restrict rgb888hsvptr = s_rgb888hsv;
-        uint16_t* restrict dstImage = reinterpret_cast<uint16_t*>(_outImage.m_ptr);
-
-        const uint32_t width          = m_outImageDesc.m_width;
-        const uint32_t height         = m_outImageDesc.m_height;
-        const uint32_t dstLineLength  = m_outImageDesc.m_lineLength;
-        const uint32_t srcToDstShift  = m_srcToDstShift;
-
-        uint32_t targetPointsPerRow;
-        uint32_t targetPointsCol;
-
-        assert(m_outImageDesc.m_height % 4 == 0); // verified in setup
-  #pragma MUST_ITERATE(4, ,4)
-        for (uint32_t dstRow=0; dstRow < height; ++dstRow)
-        {
-          uint16_t* restrict clastermapRow = reinterpret_cast<uint16_t*>(s_clastermap + (dstRow >> 2)*m_clastermapDesc.m_width);
-
-          targetPointsPerRow = 0;
-          targetPointsCol = 0;
-  #pragma MUST_ITERATE(32, ,32)
-          for (uint32_t dstCol=0; dstCol < width; ++dstCol)
-          {
-            const uint64_t rgb888hsv = *rgb888hsvptr++;
-            const uint16_t clastermap = *(clastermapRow + (dstCol >> 2));
-
-            uint16_t clasterNum = m_clasterizer.getMinEqClaster(clastermap);
-            const bool det = (clasterNum < 0xFFFF);
-            targetPointsPerRow += det;
-
-            if(det)
-            {
-              X1[clasterNum] = X1[clasterNum] < dstCol ? X1[clasterNum] : dstCol;
-              X2[clasterNum] = X2[clasterNum] > dstCol ? X2[clasterNum] : dstCol;
-              Y1[clasterNum] = Y1[clasterNum] < dstRow ? Y1[clasterNum] : dstRow;
-              Y2[clasterNum] = Y2[clasterNum] > dstRow ? Y2[clasterNum] : dstRow;
-            }
-
-            writeOutputPixel(dstImage++, det?0x00ffff:_hill(rgb888hsv));
-          }
-          m_targetPoints += targetPointsPerRow;
-        }
-
+        proceedImageHsv(_outImage);
       }
 
 #ifdef DEBUG_REPEAT
@@ -555,14 +594,13 @@ class BallDetector<TRIK_VIDTRANSCODE_CV_VIDEO_FORMAT_YUV422, TRIK_VIDTRANSCODE_C
 
       const uint32_t totalSize = m_outImageDesc.m_height*m_outImageDesc.m_width;
 
-      for(int i = 0; i < m_clastersAmount; i++)
+      for(int i = 0; i < m_clustersAmount; i++)
       {
         int32_t a = X2[i] - X1[i];
         int32_t b = Y2[i] - Y1[i];
         if(a > 0 && b > 0)
           SIZE[i] = a*b;
       }
-
 
       if (m_targetPoints > 0)
       {
