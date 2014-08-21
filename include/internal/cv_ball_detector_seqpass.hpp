@@ -216,7 +216,7 @@ class BallDetector<TRIK_VIDTRANSCODE_CV_VIDEO_FORMAT_YUV422P, TRIK_VIDTRANSCODE_
         assert(m_inImageDesc.m_width % 32 == 0); // verified in setup
 #pragma MUST_ITERATE(32, ,32)
         for(int c = 0; c < width; c++) {
-          if(c > 10 && c < width - 10) {
+          if(c > 15 && c < width - 15) {
             const bool det = (*sobelBin == 0xFF);
             targetPointsPerRow += det;
             targetPointsCol += det?c:0;
@@ -226,7 +226,7 @@ class BallDetector<TRIK_VIDTRANSCODE_CV_VIDEO_FORMAT_YUV422P, TRIK_VIDTRANSCODE_
         m_targetX      += targetPointsCol;
         m_targetPoints += targetPointsPerRow;
       }
-
+/*
 //Harris corner detector
       const uint8_t* restrict in1 = reinterpret_cast<const uint8_t*>(_inImage.m_ptr);
       int16_t* restrict xgr = reinterpret_cast<int16_t*>(s_xGrad);
@@ -251,7 +251,7 @@ class BallDetector<TRIK_VIDTRANSCODE_CV_VIDEO_FORMAT_YUV422P, TRIK_VIDTRANSCODE_
       VLIB_nonMaxSuppress_7x7_S16(reinterpret_cast<const int16_t*>(s_harrisScore), 
                                   width, height, 17000, 
                                   reinterpret_cast<uint8_t*>(s_y3));
-
+*/
 //in_img to rgb565
       const short* restrict coeff = s_coeff;
       const unsigned char* restrict res_in = reinterpret_cast<const unsigned char*>(s_y);
@@ -260,9 +260,10 @@ class BallDetector<TRIK_VIDTRANSCODE_CV_VIDEO_FORMAT_YUV422P, TRIK_VIDTRANSCODE_
       unsigned short* rgb565_out           = reinterpret_cast<unsigned short*>(s_y2);
       IMG_ycbcr422pl_to_rgb565(coeff, res_in, cb_in, cr_in, rgb565_out, width*height);
 
-//lets try scaling out & highlight corners
+
+//lets try scaling out // & highlight corners
       const uint16_t* restrict imgRgb565ptr  = reinterpret_cast<uint16_t*>(s_y2);
-      const uint8_t* restrict corners  = reinterpret_cast<uint8_t*>(s_y3);
+//      const uint8_t* restrict corners  = reinterpret_cast<uint8_t*>(s_y3);
       const uint32_t dstLineLength  = m_outImageDesc.m_lineLength;
       const uint32_t* restrict p_hi2ho = s_hi2ho;
       #pragma MUST_ITERATE(8, ,8)
