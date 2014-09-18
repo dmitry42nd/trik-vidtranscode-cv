@@ -32,16 +32,17 @@ extern "C" {
 
 #warning Eliminate global var
 static uint16_t s_y[320*240];
-static uint16_t s_y2[320*240];
 static uint8_t s_cb[320*240];
 static uint8_t s_cr[320*240];
+
+static uint16_t s_y2[320*240];
 
 static int16_t s_xGrad[320*240+1];
 static int16_t s_yGrad[320*240+1];
 static int16_t s_gradMag[320*240+1];
 static uint16_t s_harrisScore[320*240];
 
-static uint8_t s_buffer[20]; //200
+static uint8_t s_buffer[200]; //200
 
 static const short s_coeff[5] = { 0x2000, 0x2BDD, -0x0AC5, -0x1658, 0x3770 };
 
@@ -175,7 +176,7 @@ class BallDetector<TRIK_VIDTRANSCODE_CV_VIDEO_FORMAT_YUV422P, TRIK_VIDTRANSCODE_
 //separate Cb Cr
       uint8_t* restrict cb   = reinterpret_cast<uint8_t*>(s_cb);
       uint8_t* restrict cr   = reinterpret_cast<uint8_t*>(s_cr);
-      const uint16_t* restrict CbCr = reinterpret_cast<const uint16_t*>(_inImage.m_ptr +
+      const uint16_t* restrict CbCr = reinterpret_cast<const uint16_t*>(_inImage.m_ptr + 
                                                                     m_inImageDesc.m_lineLength*m_inImageDesc.m_height);
       #pragma MUST_ITERATE(8, ,8)
       for(int i = 0; i < imgSize; i++) {
@@ -184,12 +185,12 @@ class BallDetector<TRIK_VIDTRANSCODE_CV_VIDEO_FORMAT_YUV422P, TRIK_VIDTRANSCODE_
           CbCr++;
       }
 
-/*
+
 //Sobel edge detection
       const unsigned char* restrict y_in_sobel  = reinterpret_cast<const unsigned char*>(_inImage.m_ptr);
       unsigned char* restrict   sobel_out = reinterpret_cast<unsigned char*>(s_y);
       IMG_sobel_3x3_8(y_in_sobel, sobel_out, width, height);
-*/
+
 
 //Harris corner detector
       VLIB_xyGradientsAndMagnitude(reinterpret_cast<const uint8_t*>(_inImage.m_ptr), 
@@ -199,30 +200,31 @@ class BallDetector<TRIK_VIDTRANSCODE_CV_VIDEO_FORMAT_YUV422P, TRIK_VIDTRANSCODE_
 
       const int16_t* restrict xGrad_h = reinterpret_cast<const int16_t*>(s_xGrad);
       const int16_t* restrict yGrad_h = reinterpret_cast<const int16_t*>(s_yGrad);
-      int16_t* restrict out_m          = reinterpret_cast<int16_t*>(s_harrisScore);
-      uint8_t* restrict buffer         = reinterpret_cast<uint8_t*>(s_buffer); //what for?
+      int16_t* restrict out_m         = reinterpret_cast<int16_t*>(s_harrisScore);
+      uint8_t* restrict buffer        = reinterpret_cast<uint8_t*>(s_buffer); //what for?
+
       VLIB_harrisScore_7x7(reinterpret_cast<const int16_t*>(s_xGrad),
                            reinterpret_cast<const int16_t*>(s_yGrad),
                            width, height,
                            reinterpret_cast<int16_t*>(s_harrisScore),
-                           2500, 
+                           1310, 
                            reinterpret_cast<uint8_t*>(s_buffer));
 
       VLIB_nonMaxSuppress_7x7_S16(reinterpret_cast<const int16_t*>(s_harrisScore), 
-                                  width, height, 17000, 
+                                  width, height, 7000, 
                                   reinterpret_cast<uint8_t*>(s_y2));
 
       //proceedImageHsv(_inImage, _outImage);
 
 //in_img to rgb565 & out
       const short* restrict coeff = s_coeff;
-      const unsigned char* restrict res_in = reinterpret_cast<const unsigned char*>(_inImage.m_ptr);
+      const unsigned char* restrict res_in = reinterpret_cast<const unsigned char*>(s_y);
       const unsigned char* restrict cb_in  = reinterpret_cast<const unsigned char*>(s_cb);
       const unsigned char* restrict cr_in  = reinterpret_cast<const unsigned char*>(s_cr);
       unsigned short* rgb565_out           = reinterpret_cast<unsigned short*>(_outImage.m_ptr);
       IMG_ycbcr422pl_to_rgb565(coeff, res_in, cb_in, cr_in, rgb565_out, 320*240);
 
-      proceedImageHsv(_inImage, _outImage);
+//      proceedImageHsv(_inImage, _outImage);
 
 //highlight corners
       const uint8_t* restrict corners  = reinterpret_cast<uint8_t*>(s_y2);
