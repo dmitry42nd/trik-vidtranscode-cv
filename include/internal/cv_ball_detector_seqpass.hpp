@@ -173,6 +173,10 @@ class BallDetector<TRIK_VIDTRANSCODE_CV_VIDEO_FORMAT_YUV422P, TRIK_VIDTRANSCODE_
       const uint32_t width          = m_inImageDesc.m_width;
       const uint32_t height         = m_inImageDesc.m_height;
       const uint32_t imgSize        = width*height;
+      
+      uint16_t targetPointsPerRow;
+      uint16_t targetPointsCol;
+      
 //separate Cb Cr
       uint8_t* restrict cb   = reinterpret_cast<uint8_t*>(s_cb);
       uint8_t* restrict cr   = reinterpret_cast<uint8_t*>(s_cr);
@@ -191,17 +195,37 @@ class BallDetector<TRIK_VIDTRANSCODE_CV_VIDEO_FORMAT_YUV422P, TRIK_VIDTRANSCODE_
       unsigned char* restrict   sobel_out = reinterpret_cast<unsigned char*>(s_y);
       IMG_sobel_3x3_8(y_in_sobel, sobel_out, width, height);
 
+      IMG_thr_gt2max_8(reinterpret_cast<const unsigned char*>(s_y), 
+                       reinterpret_cast<unsigned char*>(s_y),
+                       width, height, 50);
+
+//detect line
+      const uint8_t* restrict sobelBin = reinterpret_cast<unsigned char*>(s_y);
+      assert(m_inImageDesc.m_height % 4 == 0); // verified in setup
+      #pragma MUST_ITERATE(4, ,4)
+      for(int r = 0; r < height; r++) {
+        targetPointsPerRow = 0;
+        targetPointsCol = 0;
+
+        assert(m_inImageDesc.m_width % 32 == 0); // verified in setup
+#pragma MUST_ITERATE(32, ,32)
+        for(int c = 0; c < width; c++) {
+          if(c > 15 && c < width - 15) {
+            const bool det = (*sobelBin == 0xFF);
+            targetPointsPerRow += det;
+            targetPointsCol += det?c:0;
+          }
+          sobelBin++;
+        }
+        m_targetX      += targetPointsCol;
+        m_targetPoints += targetPointsPerRow;
+      }
 
 //Harris corner detector
       VLIB_xyGradientsAndMagnitude(reinterpret_cast<const uint8_t*>(_inImage.m_ptr), 
                                    reinterpret_cast<int16_t*>(s_xGrad), 
                                    reinterpret_cast<int16_t*>(s_yGrad),
                                    reinterpret_cast<int16_t*>(s_gradMag), width, height);
-
-      const int16_t* restrict xGrad_h = reinterpret_cast<const int16_t*>(s_xGrad);
-      const int16_t* restrict yGrad_h = reinterpret_cast<const int16_t*>(s_yGrad);
-      int16_t* restrict out_m         = reinterpret_cast<int16_t*>(s_harrisScore);
-      uint8_t* restrict buffer        = reinterpret_cast<uint8_t*>(s_buffer); //what for?
 
       VLIB_harrisScore_7x7(reinterpret_cast<const int16_t*>(s_xGrad),
                            reinterpret_cast<const int16_t*>(s_yGrad),
