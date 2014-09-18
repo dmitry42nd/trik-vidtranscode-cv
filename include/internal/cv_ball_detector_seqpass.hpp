@@ -36,6 +36,7 @@ static uint8_t s_cb[320*240];
 static uint8_t s_cr[320*240];
 
 static uint16_t s_y2[320*240];
+static uint16_t s_y3[320*240];
 
 static int16_t s_xGrad[320*240+1];
 static int16_t s_yGrad[320*240+1];
@@ -44,8 +45,10 @@ static uint16_t s_harrisScore[320*240];
 
 static uint8_t s_buffer[200]; //200
 
-static const short s_coeff[5] = { 0x2000, 0x2BDD, -0x0AC5, -0x1658, 0x3770 };
+static uint32_t s_wi2wo[640];
+static uint32_t s_hi2ho[480];
 
+static const short s_coeff[5] = { 0x2000, 0x2BDD, -0x0AC5, -0x1658, 0x3770 };
 
 template <>
 class BallDetector<TRIK_VIDTRANSCODE_CV_VIDEO_FORMAT_YUV422P, TRIK_VIDTRANSCODE_CV_VIDEO_FORMAT_RGB565X> : public CVAlgorithm
@@ -103,10 +106,9 @@ class BallDetector<TRIK_VIDTRANSCODE_CV_VIDEO_FORMAT_YUV422P, TRIK_VIDTRANSCODE_
     {
       const int32_t srcCol = range<int32_t>(_srcColBot, _srcCol, _srcColTop);
       const int32_t srcRow = range<int32_t>(_srcRowBot, _srcRow, _srcRowTop);
-      const double srcToDstShift = m_srcToDstShift;
-    
-      const int32_t dstRow = srcRow * srcToDstShift;
-      const int32_t dstCol = srcCol * srcToDstShift;
+
+      const int32_t dstRow = s_hi2ho[srcRow];
+      const int32_t dstCol = s_wi2wo[srcCol];
 
       const uint32_t dstOfs = dstRow*m_outImageDesc.m_lineLength + dstCol*sizeof(uint16_t);
       writeOutputPixel(reinterpret_cast<uint16_t*>(_outImage.m_ptr+dstOfs), _rgb888);
@@ -238,8 +240,7 @@ class BallDetector<TRIK_VIDTRANSCODE_CV_VIDEO_FORMAT_YUV422P, TRIK_VIDTRANSCODE_
                                   width, height, 7000, 
                                   reinterpret_cast<uint8_t*>(s_y2));
 
-      //proceedImageHsv(_inImage, _outImage);
-
+/*
 //in_img to rgb565 & out
       const short* restrict coeff = s_coeff;
       const unsigned char* restrict res_in = reinterpret_cast<const unsigned char*>(s_y);
@@ -247,8 +248,33 @@ class BallDetector<TRIK_VIDTRANSCODE_CV_VIDEO_FORMAT_YUV422P, TRIK_VIDTRANSCODE_
       const unsigned char* restrict cr_in  = reinterpret_cast<const unsigned char*>(s_cr);
       unsigned short* rgb565_out           = reinterpret_cast<unsigned short*>(_outImage.m_ptr);
       IMG_ycbcr422pl_to_rgb565(coeff, res_in, cb_in, cr_in, rgb565_out, 320*240);
+*/
+//in_img to rgb565
+      const short* restrict coeff = s_coeff;
+      const unsigned char* restrict res_in = reinterpret_cast<const unsigned char*>(s_y);
+      const unsigned char* restrict cb_in  = reinterpret_cast<const unsigned char*>(s_cb);
+      const unsigned char* restrict cr_in  = reinterpret_cast<const unsigned char*>(s_cr);
+      unsigned short* rgb565_out           = reinterpret_cast<unsigned short*>(_outImage.m_ptr);
+//      unsigned short* rgb565_out           = reinterpret_cast<unsigned short*>(s_y3);
+      IMG_ycbcr422pl_to_rgb565(coeff, res_in, cb_in, cr_in, rgb565_out, width*height);
 
-//      proceedImageHsv(_inImage, _outImage);
+/*
+//lets try scaling out // & highlight corners
+      const uint16_t* restrict imgRgb565ptr  = reinterpret_cast<uint16_t*>(s_y3);
+      const uint32_t dstLineLength  = m_outImageDesc.m_lineLength;
+      const uint32_t* restrict p_hi2ho = s_hi2ho;
+      #pragma MUST_ITERATE(8, ,8)
+      for(int r = 0; r < height; r++) {
+        const uint32_t dR = *(p_hi2ho++);
+        uint16_t* restrict dIR = reinterpret_cast<uint16_t*>(_outImage.m_ptr) + dR*dstLineLength;
+        const uint32_t* restrict p_wi2wo = s_wi2wo;
+        #pragma MUST_ITERATE(8, ,8)
+        for(int c = 0; c < width; c++) {
+          const uint32_t dC = *(p_wi2wo++);
+          *(dIR+dC) = *(imgRgb565ptr++);
+        }
+      }
+*/
 
 //highlight corners
       const uint8_t* restrict corners  = reinterpret_cast<uint8_t*>(s_y2);
@@ -321,9 +347,23 @@ class BallDetector<TRIK_VIDTRANSCODE_CV_VIDEO_FORMAT_YUV422P, TRIK_VIDTRANSCODE_
         return false;
 
       #define min(x,y) x < y ? x : y;
-      m_srcToDstShift = min(static_cast<double>(m_outImageDesc.m_width)/m_inImageDesc.m_width, 
-                            static_cast<double>(m_outImageDesc.m_height)/m_inImageDesc.m_height);
+      const double srcToDstShift = min(static_cast<double>(m_outImageDesc.m_width)/m_inImageDesc.m_width, 
+                                 static_cast<double>(m_outImageDesc.m_height)/m_inImageDesc.m_height);
 
+      const uint32_t widthIn  = _inImageDesc.m_width;
+      const uint32_t widthOut = _outImageDesc.m_width;
+      uint32_t* restrict p_wi2wo = s_wi2wo;
+      for(int i = 0; i < widthIn; i++) {
+          *(p_wi2wo++) = i*srcToDstShift;
+      }
+
+      const uint32_t heightIn  = _inImageDesc.m_height;
+      const uint32_t heightOut = _outImageDesc.m_height;
+      uint32_t* restrict p_hi2ho = s_hi2ho;
+      for(uint32_t i = 0; i < heightIn; i++) {
+          *(p_hi2ho++) = i*srcToDstShift;
+      }
+      
       /* Static member initialization on first instance creation */
       if (s_mult43_div == NULL || s_mult255_div == NULL)
       {
