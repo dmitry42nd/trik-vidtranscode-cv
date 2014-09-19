@@ -31,12 +31,12 @@ extern "C" {
 
 
 #warning Eliminate global var
-static uint16_t s_y[320*240];
+static uint8_t s_y[320*240];
 static uint8_t s_cb[320*240];
 static uint8_t s_cr[320*240];
 
-static uint16_t s_y2[320*240];
-static uint16_t s_y3[320*240];
+static uint32_t s_wi2wo[640];
+static uint32_t s_hi2ho[480];
 
 static int16_t s_xGrad[320*240+1];
 static int16_t s_yGrad[320*240+1];
@@ -44,9 +44,6 @@ static int16_t s_gradMag[320*240+1];
 static uint16_t s_harrisScore[320*240];
 
 static uint8_t s_buffer[200]; //200
-
-static uint32_t s_wi2wo[640];
-static uint32_t s_hi2ho[480];
 
 static const short s_coeff[5] = { 0x2000, 0x2BDD, -0x0AC5, -0x1658, 0x3770 };
 
@@ -238,17 +235,8 @@ class BallDetector<TRIK_VIDTRANSCODE_CV_VIDEO_FORMAT_YUV422P, TRIK_VIDTRANSCODE_
 
       VLIB_nonMaxSuppress_7x7_S16(reinterpret_cast<const int16_t*>(s_harrisScore), 
                                   width, height, 7000, 
-                                  reinterpret_cast<uint8_t*>(s_y2));
+                                  reinterpret_cast<uint8_t*>(s_gradMag));
 
-/*
-//in_img to rgb565 & out
-      const short* restrict coeff = s_coeff;
-      const unsigned char* restrict res_in = reinterpret_cast<const unsigned char*>(s_y);
-      const unsigned char* restrict cb_in  = reinterpret_cast<const unsigned char*>(s_cb);
-      const unsigned char* restrict cr_in  = reinterpret_cast<const unsigned char*>(s_cr);
-      unsigned short* rgb565_out           = reinterpret_cast<unsigned short*>(_outImage.m_ptr);
-      IMG_ycbcr422pl_to_rgb565(coeff, res_in, cb_in, cr_in, rgb565_out, 320*240);
-*/
 //in_img to rgb565
       const short* restrict coeff = s_coeff;
       const unsigned char* restrict res_in = reinterpret_cast<const unsigned char*>(s_y);
@@ -277,7 +265,7 @@ class BallDetector<TRIK_VIDTRANSCODE_CV_VIDEO_FORMAT_YUV422P, TRIK_VIDTRANSCODE_
 */
 
 //highlight corners
-      const uint8_t* restrict corners  = reinterpret_cast<uint8_t*>(s_y2);
+      const uint8_t* restrict corners  = reinterpret_cast<uint8_t*>(s_gradMag);
       #pragma MUST_ITERATE(8, ,8)
       for(int r = 0; r < 240; r++) {
         #pragma MUST_ITERATE(8, ,8)
@@ -351,14 +339,12 @@ class BallDetector<TRIK_VIDTRANSCODE_CV_VIDEO_FORMAT_YUV422P, TRIK_VIDTRANSCODE_
                                  static_cast<double>(m_outImageDesc.m_height)/m_inImageDesc.m_height);
 
       const uint32_t widthIn  = _inImageDesc.m_width;
-      const uint32_t widthOut = _outImageDesc.m_width;
       uint32_t* restrict p_wi2wo = s_wi2wo;
       for(int i = 0; i < widthIn; i++) {
           *(p_wi2wo++) = i*srcToDstShift;
       }
 
       const uint32_t heightIn  = _inImageDesc.m_height;
-      const uint32_t heightOut = _outImageDesc.m_height;
       uint32_t* restrict p_hi2ho = s_hi2ho;
       for(uint32_t i = 0; i < heightIn; i++) {
           *(p_hi2ho++) = i*srcToDstShift;
@@ -410,8 +396,7 @@ class BallDetector<TRIK_VIDTRANSCODE_CV_VIDEO_FORMAT_YUV422P, TRIK_VIDTRANSCODE_
 #ifdef DEBUG_REPEAT
       for (unsigned repeat = 0; repeat < DEBUG_REPEAT; ++repeat) {
 #endif
-        if (m_inImageDesc.m_height > 0 && m_inImageDesc.m_width > 0)
-        {
+        if (m_inImageDesc.m_height > 0 && m_inImageDesc.m_width > 0) {
           convertImageYuyvToRgb(_inImage, _outImage);
         }
 #ifdef DEBUG_REPEAT
