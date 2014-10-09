@@ -192,7 +192,7 @@ class HsvRangeDetector
       }
 
       _h = static_cast<uint16_t>(static_cast<double>(m_maxHue)*1.4f);
-      _hTol = 8;
+      _hTol = 20;
       _s = static_cast<uint16_t>(static_cast<double>(m_maxSat)*0.39f);
       _sTol = 30;
       _v = static_cast<uint16_t>(static_cast<double>(m_maxVal)*0.39f);

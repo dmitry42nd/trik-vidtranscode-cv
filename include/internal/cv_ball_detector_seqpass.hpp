@@ -358,7 +358,8 @@ void clasterizePixel(const uint32_t _hsv)
           const bool det = detectHsvPixel(_loll(rgb888hsv), u64_hsv_range, u32_hsv_expect);
           targetPointsPerRow += det;
           targetPointsCol += det?srcCol:0;
-          writeOutputPixel(dstImageRow+dstCol, det?0x00ffff:_hill(rgb888hsv));
+          if (srcCol > 5) //that stupid line
+            writeOutputPixel(dstImageRow+dstCol, det?0x00ffff:_hill(rgb888hsv));
         }
         m_targetX      += targetPointsCol;
         m_targetY      += srcRow*targetPointsPerRow;
