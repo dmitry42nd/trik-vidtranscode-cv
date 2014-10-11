@@ -1,5 +1,5 @@
-#ifndef TRIK_VIDTRANSCODE_CV_INTERNAL_CV_CLASTERIZER_HPP_
-#define TRIK_VIDTRANSCODE_CV_INTERNAL_CV_CLASTERIZER_HPP_
+#ifndef TRIK_VIDTRANSCODE_CV_INTERNAL_CV_CLUSTERIZER_HPP_
+#define TRIK_VIDTRANSCODE_CV_INTERNAL_CV_CLUSTERIZER_HPP_
 
 #ifndef __cplusplus
 #error C++-only header
@@ -31,6 +31,6 @@
 
 // include one of implementations
 //#include "internal/cv_bitmap_bulder_seqpass.hpp"
-#include "internal/cv_clasterizer_reference.hpp"
+#include "internal/cv_clusterizer_reference.hpp"
 
-#endif // !TRIK_VIDTRANSCODE_CV_INTERNAL_CV_CLASTERIZER_HPP_
+#endif // !TRIK_VIDTRANSCODE_CV_INTERNAL_CV_CLUSTERIZER_HPP_

@@ -67,12 +67,6 @@ class BitmapBuilder : public CVAlgorithm
     virtual bool run(const TrikCvImageBuffer& _inImage, TrikCvImageBuffer& _outImage,
                      const TrikCvAlgInArgs& _inArgs, TrikCvAlgOutArgs& _outArgs)
     {
-      if (m_inImageDesc.m_height * m_inImageDesc.m_lineLength > _inImage.m_size)
-        return false;
-      if (m_outImageDesc.m_height * m_outImageDesc.m_lineLength > _outImage.m_size)
-        return false;
-      _outImage.m_size = m_outImageDesc.m_height * m_outImageDesc.m_lineLength;
-
       uint32_t detectHueFrom = range<XDAS_Int16>(0, (_inArgs.detectHueFrom * 255) / 359, 255); // scaling 0..359 to 0..255
       uint32_t detectHueTo   = range<XDAS_Int16>(0, (_inArgs.detectHueTo   * 255) / 359, 255); // scaling 0..359 to 0..255
       uint32_t detectSatFrom = range<XDAS_Int16>(0, (_inArgs.detectSatFrom * 255) / 100, 255); // scaling 0..100 to 0..255
@@ -110,7 +104,6 @@ class BitmapBuilder : public CVAlgorithm
       const uint64_t* restrict p_inImg = reinterpret_cast<const uint64_t*>(_inImage.m_ptr);
       const uint16_t* restrict p_hi2ho = s_hi2ho;
 
-
 //just detect and build metapixels:
       uint8_t* restrict p_metapixFillerShifter = s_metapixFillerShifter;
       uint8_t metapixFiller = 0;
@@ -128,10 +121,6 @@ class BitmapBuilder : public CVAlgorithm
             p_outImg++;
             metapixFiller = 0;
           }
-/*
-          p_outImg += !(metapixFiller < METAPIX_SIZE);
-          metapixFiller %= METAPIX_SIZE;
-*/
         }
       }
 
