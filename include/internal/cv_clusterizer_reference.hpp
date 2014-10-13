@@ -25,8 +25,6 @@ class Clusterizer : public CVAlgorithm
     TrikCvImageDesc m_outImageDesc;
 
     std::vector<uint16_t> equalClusters;
-    std::vector<uint16_t> directEqualClusters;
-    std::vector<uint16_t> clustersMass;
 
     uint16_t m_maxCluster;
 
@@ -45,21 +43,7 @@ class Clusterizer : public CVAlgorithm
     {
       if (cluster1 == cluster2) return true;
 
-      uint16_t tmp = cluster1;
-      while(cluster1 != equalClusters[tmp]) {
-        tmp = equalClusters[tmp];
-        if (tmp == cluster2) return true;
-      }
-
-      return false;
-    }
-
-
-    void linkClusters(const uint16_t cluster1, const uint16_t cluster2)
-    {
-      uint16_t tmp = equalClusters[cluster1];
-      equalClusters[cluster1] = equalClusters[cluster2];
-      equalClusters[cluster2] = tmp;
+      return (equalClusters[cluster1] == equalClusters[cluster2]);
     }
 
 /*
@@ -74,10 +58,16 @@ class Clusterizer : public CVAlgorithm
     {
       const uint32_t width = m_inImageDesc.m_width;
 
-      a[0] = *(pixPtr - 1);
-      a[1] = *(pixPtr - width - 1);
-      a[2] = *(pixPtr - width);
-      a[3] = *(pixPtr - width + 1);
+      if(r != 0)
+      {
+        a[2] = *(pixPtr - width);
+        if(c != 0)
+          a[1] = *(pixPtr - width - 1);
+        if(c != width - 1)
+          a[3] = *(pixPtr - width + 1);
+      }
+      if(c != 0)
+        a[0] = *(pixPtr - 1);     
     }
 
 
@@ -98,41 +88,16 @@ class Clusterizer : public CVAlgorithm
           #pragma MUST_ITERATE(4,,4)
           for(int i = 0; i < ENV_PIXS; i++)
             if((a[i] != NO_CLUSTER) && (a[i] != localMinCluster))
-              if(!isClustersEqual(localMinCluster, a[i]))
-                linkClusters(localMinCluster, a[i]);
+              if(equalClusters[a[i]] != equalClusters[localMinCluster])
+                equalClusters[a[i]] = equalClusters[localMinCluster];
         }
 
     }
-
-
-    void setMinEqClusters()
-    {
-      directEqualClusters.resize(equalClusters.size());
-
-      for(uint16_t c = 1; c < equalClusters.size(); c++) {
-        if (c != equalClusters[c]) {
-          uint16_t min = NO_CLUSTER;
-          uint16_t tmp = c;
-
-          do {
-              min = tmp < min ? tmp : min;
-              tmp = equalClusters[tmp];
-          }
-          while(c != tmp);
-
-          directEqualClusters[c] = min;
-        }
-        else {
-          directEqualClusters[c] = c;
-        }
-      }
-    }
-
 
   public:
     uint16_t getMinEqCluster(uint16_t a)
     {
-      return a == NO_CLUSTER ? NO_CLUSTER : directEqualClusters[a];
+      return a == NO_CLUSTER ? NO_CLUSTER : equalClusters[a];
     }
 
     uint16_t getClustersAmount()
@@ -157,26 +122,21 @@ class Clusterizer : public CVAlgorithm
     virtual bool run(const TrikCvImageBuffer& _inImage, TrikCvImageBuffer& _outImage,
                      const TrikCvAlgInArgs& _inArgs, TrikCvAlgOutArgs& _outArgs)
     {
-      m_maxCluster = 1;
-      equalClusters.resize(1);
+      m_maxCluster = 0;
+      equalClusters.clear();
 
-      const uint16_t* restrict srcImgPtr = reinterpret_cast<uint16_t*>(_inImage.m_ptr + 1);
-      uint16_t* restrict dstImgPtr       = reinterpret_cast<uint16_t*>(_outImage.m_ptr + 1);
+      const uint16_t* restrict srcImgPtr = reinterpret_cast<uint16_t*>(_inImage.m_ptr);
+      uint16_t* restrict dstImgPtr       = reinterpret_cast<uint16_t*>(_outImage.m_ptr);
 
-      for (int srcRow = 1; srcRow < m_inImageDesc.m_height-1; srcRow++) {
-        const uint16_t* restrict srcImgRow = srcImgPtr + srcRow*m_inImageDesc.m_width;
-        uint16_t* restrict dstImgRow = dstImgPtr + srcRow*m_outImageDesc.m_width;
-
-        for (int srcCol = 1; srcCol < m_inImageDesc.m_width-1; srcCol++) {
-          if(pop(*(srcImgRow++)) > 3) {
-            setClusterNum(dstImgRow, srcRow, srcCol);
+      for (int srcRow = 0; srcRow < m_inImageDesc.m_height; srcRow++) {
+        for (int srcCol = 0; srcCol < m_inImageDesc.m_width; srcCol++) {
+          if(pop(*(srcImgPtr++)) > 3) {
+            setClusterNum(dstImgPtr, srcRow, srcCol);
           }
 
-          dstImgRow++; //cause we use addres of dstImgPtr in setClusterNum()
+          dstImgPtr++; //cause we use addres of dstImgPtr in setClusterNum()
         }
       }
-
-      setMinEqClusters();
     }
 };
 
