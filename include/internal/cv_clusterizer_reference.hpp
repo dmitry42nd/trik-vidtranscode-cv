@@ -25,7 +25,6 @@ class Clusterizer : public CVAlgorithm
     TrikCvImageDesc m_outImageDesc;
 
     std::vector<uint16_t> equalClusters;
-
     uint16_t m_maxCluster;
 
     uint16_t min(uint16_t* envPixs)
@@ -41,9 +40,10 @@ class Clusterizer : public CVAlgorithm
 
     bool isClustersEqual(const uint16_t cluster1, const uint16_t cluster2)
     {
-      if (cluster1 == cluster2) return true;
-
-      return (equalClusters[cluster1] == equalClusters[cluster2]);
+      if (cluster1 == cluster2) 
+        return true;
+      else
+        return (equalClusters[cluster1] == equalClusters[cluster2]);
     }
 
 /*
@@ -87,11 +87,10 @@ class Clusterizer : public CVAlgorithm
 
           #pragma MUST_ITERATE(4,,4)
           for(int i = 0; i < ENV_PIXS; i++)
-            if((a[i] != NO_CLUSTER) && (a[i] != localMinCluster))
-              if(equalClusters[a[i]] != equalClusters[localMinCluster])
+            if((a[i] != NO_CLUSTER))
+              if(!isClustersEqual(a[i],localMinCluster))
                 equalClusters[a[i]] = equalClusters[localMinCluster];
         }
-
     }
 
   public:
@@ -103,6 +102,15 @@ class Clusterizer : public CVAlgorithm
     uint16_t getClustersAmount()
     {
       return equalClusters.size();
+    }
+
+    uint32_t getObjectsAmount()
+    {
+      uint32_t n = 0;
+      for(int i = 0; i < equalClusters.size(); i++)
+        n = n < equalClusters[i] ? equalClusters[i] : n;
+      
+      return n;
     }
 
     virtual bool setup(const TrikCvImageDesc& _inImageDesc, const TrikCvImageDesc& _outImageDesc, int8_t* _fastRam, size_t _fastRamSize)
