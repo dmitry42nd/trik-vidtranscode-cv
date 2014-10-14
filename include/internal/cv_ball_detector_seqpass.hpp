@@ -569,7 +569,7 @@ class BallDetector<TRIK_VIDTRANSCODE_CV_VIDEO_FORMAT_YUV422P, TRIK_VIDTRANSCODE_
         /*
         m_objectsAmount = m_clusterizer.getObjectsAmount();
         Objects objects[m_objectsAmount];
-*/
+        */
         proceedImageHsv(_outImage);
       }
 
