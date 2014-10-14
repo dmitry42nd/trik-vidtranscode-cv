@@ -72,6 +72,8 @@ typedef struct TRIK_VIDTRANSCODE_CV_OutArgsAlg {
     XDAS_UInt16		detectSatTolerance;   // [0..256]
     XDAS_UInt16		detectVal; // [0..256]
     XDAS_UInt16		detectValTolerance;   // [0..256]
+    XDAS_UInt16		cornersX[50]; // [0..256]
+    XDAS_UInt16		cornersY[50];   // [0..256]
 } TRIK_VIDTRANSCODE_CV_OutArgsAlg;
 
 typedef struct TRIK_VIDTRANSCODE_CV_OutArgs {

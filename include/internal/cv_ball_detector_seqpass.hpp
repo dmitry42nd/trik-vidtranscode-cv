@@ -222,7 +222,7 @@ class BallDetector<TRIK_VIDTRANSCODE_CV_VIDEO_FORMAT_YUV422P, TRIK_VIDTRANSCODE_
         m_targetPoints += targetPointsPerRow;
       }
 
-#if 0
+#if 1
 //Harris corner detector
       VLIB_xyGradientsAndMagnitude(reinterpret_cast<const uint8_t*>(_inImage.m_ptr), 
                                    reinterpret_cast<int16_t*>(s_xGrad), 
@@ -233,7 +233,7 @@ class BallDetector<TRIK_VIDTRANSCODE_CV_VIDEO_FORMAT_YUV422P, TRIK_VIDTRANSCODE_
                            reinterpret_cast<const int16_t*>(s_yGrad),
                            width, height,
                            reinterpret_cast<int16_t*>(s_harrisScore),
-                           1310, 
+                           1500, 
                            reinterpret_cast<uint8_t*>(s_buffer));
 
       VLIB_nonMaxSuppress_7x7_S16(reinterpret_cast<const int16_t*>(s_harrisScore), 
@@ -252,7 +252,7 @@ class BallDetector<TRIK_VIDTRANSCODE_CV_VIDEO_FORMAT_YUV422P, TRIK_VIDTRANSCODE_
 
 //lets try scaling out // & highlight corners
       const uint16_t* restrict imgRgb565ptr  = reinterpret_cast<uint16_t*>(s_gradMag);
-//      const uint8_t* restrict corners  = reinterpret_cast<uint8_t*>(s_corners);
+      const uint8_t* restrict corners  = reinterpret_cast<uint8_t*>(s_corners);
       const uint32_t dstLineLength  = m_outImageDesc.m_lineLength;
       const uint32_t* restrict p_hi2ho = s_hi2ho;
       #pragma MUST_ITERATE(8, ,8)
@@ -260,16 +260,16 @@ class BallDetector<TRIK_VIDTRANSCODE_CV_VIDEO_FORMAT_YUV422P, TRIK_VIDTRANSCODE_
         const uint32_t dR = *(p_hi2ho++);
         uint16_t* restrict dIR = reinterpret_cast<uint16_t*>(_outImage.m_ptr + dR*dstLineLength);
         const uint32_t* restrict p_wi2wo = s_wi2wo;
+
         #pragma MUST_ITERATE(8, ,8)
         for(int c = 0; c < width; c++) {
           const uint32_t dC = *(p_wi2wo++);
           *(dIR+dC) = *(imgRgb565ptr++);
-          /*
           if(c > 5 && c < 315 && r > 5 && r < 235)
             if (*corners != 0)
               drawCornerHighlight(c, r, _outImage, 0xff0000);
           corners++;
-          */
+
         }
       }
     }
