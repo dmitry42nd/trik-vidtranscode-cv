@@ -8,6 +8,7 @@
 #include <cassert>
 #include <cmath>
 #include <vector>
+#include <set>
 
 #include "internal/stdcpp.hpp"
 #include "trik_vidtranscode_cv.h"
@@ -25,6 +26,7 @@ class Clusterizer : public CVAlgorithm
     TrikCvImageDesc m_outImageDesc;
 
     std::vector<uint16_t> equalClusters;
+
     uint16_t m_maxCluster;
 
     uint16_t min(uint16_t* envPixs)
@@ -102,15 +104,6 @@ class Clusterizer : public CVAlgorithm
     uint16_t getClustersAmount()
     {
       return equalClusters.size();
-    }
-
-    uint32_t getObjectsAmount()
-    {
-      uint32_t n = 0;
-      for(int i = 0; i < equalClusters.size(); i++)
-        n = n < equalClusters[i] ? equalClusters[i] : n;
-      
-      return n;
     }
 
     virtual bool setup(const TrikCvImageDesc& _inImageDesc, const TrikCvImageDesc& _outImageDesc, int8_t* _fastRam, size_t _fastRamSize)

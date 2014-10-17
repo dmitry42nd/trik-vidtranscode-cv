@@ -22,15 +22,6 @@
 
 /* **** **** **** **** **** */ namespace cv /* **** **** **** **** **** */ {
 
-
-typedef struct Object {
-  int16_t x1;
-  int16_t x2;
-  int16_t y1;
-  int16_t y2;
-  uint32_t size;
-} Object;
-
 #warning Eliminate global var
 static uint64_t s_rgb888hsv[IMG_WIDTH_MAX*IMG_HEIGHT_MAX];
 static uint16_t s_bitmap[IMG_WIDTH_MAX*IMG_HEIGHT_MAX];
@@ -51,8 +42,10 @@ class BallDetector<TRIK_VIDTRANSCODE_CV_VIDEO_FORMAT_YUV422P, TRIK_VIDTRANSCODE_
     int32_t  m_targetY;
     uint32_t m_targetPoints;
 
-    uint16_t m_objectsAmount;
-    Object   m_objects[OBJECTS];
+    uint16_t m_clustersAmount;
+    std::vector<int32_t>  X1, X2;
+    std::vector<int32_t>  Y1, Y2;
+    std::vector<uint32_t> SIZE;
 
     TrikCvImageDesc m_inImageDesc;
     TrikCvImageDesc m_outImageDesc;
@@ -399,7 +392,6 @@ class BallDetector<TRIK_VIDTRANSCODE_CV_VIDEO_FORMAT_YUV422P, TRIK_VIDTRANSCODE_
         const uint32_t dstLineLength  = m_outImageDesc.m_lineLength;
 
         uint32_t targetPointsPerRow;
-        uint32_t targetPointsCol;
 
         const uint32_t* restrict p_hi2ho_out = s_hi2ho_out;
         const uint32_t* restrict p_hi2ho_cstr = s_hi2ho_cstr;
@@ -413,7 +405,6 @@ class BallDetector<TRIK_VIDTRANSCODE_CV_VIDEO_FORMAT_YUV422P, TRIK_VIDTRANSCODE_
           uint16_t* restrict clustermapRow = reinterpret_cast<uint16_t*>(s_clustermap + cstrRow*m_clustermapDesc.m_width);
 
           targetPointsPerRow = 0;
-          targetPointsCol = 0;
 
           const uint32_t* restrict p_wi2wo_out = s_wi2wo_out;
           const uint32_t* restrict p_wi2wo_cstr = s_wi2wo_cstr;
@@ -426,14 +417,14 @@ class BallDetector<TRIK_VIDTRANSCODE_CV_VIDEO_FORMAT_YUV422P, TRIK_VIDTRANSCODE_
             uint16_t clusterNum = m_clusterizer.getMinEqCluster(*(clustermapRow + cstrCol));
             const bool det = (clusterNum < 0xFFFF);
             targetPointsPerRow += det;
-/*
+
             if(det) {
               X1[clusterNum] = X1[clusterNum] < dstCol ? X1[clusterNum] : dstCol;
               X2[clusterNum] = X2[clusterNum] > dstCol ? X2[clusterNum] : dstCol;
               Y1[clusterNum] = Y1[clusterNum] < dstRow ? Y1[clusterNum] : dstRow;
               Y2[clusterNum] = Y2[clusterNum] > dstRow ? Y2[clusterNum] : dstRow;
             }
-*/
+            
             writeOutputPixel(dstImageRow+dstCol, det?0x00ffff:_hill(rgb888hsv));
           }
           m_targetPoints += targetPointsPerRow;
@@ -565,11 +556,24 @@ class BallDetector<TRIK_VIDTRANSCODE_CV_VIDEO_FORMAT_YUV422P, TRIK_VIDTRANSCODE_
         m_bitmapBuilder.run(m_inRgb888HsvImg, m_bitmap, _inArgs, _outArgs);
         m_clusterizer.run(m_bitmap, m_clustermap, _inArgs, _outArgs);
 
+
+        m_clustersAmount = m_clusterizer.getClustersAmount();
+
+        X1.resize(m_clustersAmount);
+        X2.resize(m_clustersAmount);
+        Y1.resize(m_clustersAmount);
+        Y2.resize(m_clustersAmount);
+        SIZE.resize(m_clustersAmount);
+
+        std::fill(X1.begin(), X1.end(), m_outImageDesc.m_width);
+        std::fill(X2.begin(), X2.end(), 0);
+                
+        std::fill(Y1.begin(), Y1.end(), m_outImageDesc.m_height);
+        std::fill(Y2.begin(), Y2.end(), 0);
+        
+        std::fill(SIZE.begin(), SIZE.end(), 0);
+
         m_targetPoints  = 0;
-        /*
-        m_objectsAmount = m_clusterizer.getObjectsAmount();
-        Objects objects[m_objectsAmount];
-        */
         proceedImageHsv(_outImage);
       }
 
@@ -592,10 +596,6 @@ class BallDetector<TRIK_VIDTRANSCODE_CV_VIDEO_FORMAT_YUV422P, TRIK_VIDTRANSCODE_
       drawRgbTargetHorizontalCenterLine(hWidth, hHeight - 2*step, _outImage, 0xff00ff);
       drawRgbTargetHorizontalCenterLine(hWidth, hHeight + 2*step, _outImage, 0xff00ff);
 
-
-      const uint32_t totalSize = m_outImageDesc.m_height*m_outImageDesc.m_width;
-
-/*
       for(int i = 0; i < m_clustersAmount; i++)
       {
         int32_t a = X2[i] - X1[i];
@@ -603,11 +603,11 @@ class BallDetector<TRIK_VIDTRANSCODE_CV_VIDEO_FORMAT_YUV422P, TRIK_VIDTRANSCODE_
         if(a > 0 && b > 0)
           SIZE[i] = a*b;
       }
-*/
+
       if (m_targetPoints > 0)
       {
         assert(m_inImageDesc.m_height > 0 && m_inImageDesc.m_width > 0); // more or less safe since no target points would be detected otherwise        
-/*
+
         for(int i = 0; i < OBJECTS; i++)
         {
             int j = max(SIZE);
@@ -626,10 +626,10 @@ class BallDetector<TRIK_VIDTRANSCODE_CV_VIDEO_FORMAT_YUV422P, TRIK_VIDTRANSCODE_
               else
                 drawOutputRectangle(X1[j], X2[j], Y1[j], Y2[j], _outImage, 0xffff00);
 
-              SIZE[j] = 0;
+              SIZE.erase(SIZE.begin()+j);
             }
         }
-*/    
+
       }
       else
       {
