@@ -7,7 +7,7 @@
 #include <xdc/runtime/Log.h>
 
 #include "internal/cv_algorithm.hpp"
-#include "internal/cv_ball_detector.hpp"
+#include "internal/cv_lk_feature_detector.hpp"
 
 
 
@@ -77,7 +77,7 @@ XDAS_Int32 handleSetupImageDescCreateCVAlgorithm(const TrikCvHandle* _handle,
   if (_inImageDesc.m_format == _inFormat && _outImageDesc.m_format == _outFormat) \
     return createCVAlgorithm<_CVAlgorithm<_inFormat, _outFormat> >(_handle, _pd, _inImageDesc, _outImageDesc)
 
-  IF_IN_OUT_FORMAT(trik::cv::BallDetector, TRIK_VIDTRANSCODE_CV_VIDEO_FORMAT_YUV422P, TRIK_VIDTRANSCODE_CV_VIDEO_FORMAT_RGB565X);
+  IF_IN_OUT_FORMAT(trik::cv::LKFeatureDetector, TRIK_VIDTRANSCODE_CV_VIDEO_FORMAT_YUV422P, TRIK_VIDTRANSCODE_CV_VIDEO_FORMAT_RGB565X);
 
 #undef IF_IN_OUT_FORMAT
 
