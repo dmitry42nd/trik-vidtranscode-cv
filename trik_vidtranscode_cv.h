@@ -47,13 +47,7 @@ typedef struct TRIK_VIDTRANSCODE_CV_DynamicParams {
 
 
 typedef struct TRIK_VIDTRANSCODE_CV_InArgsAlg {
-    XDAS_UInt16		detectHueFrom; // [0..359]
-    XDAS_UInt16		detectHueTo;   // [0..359]
-    XDAS_UInt8		detectSatFrom; // [0..100]
-    XDAS_UInt8		detectSatTo;   // [0..100]
-    XDAS_UInt8		detectValFrom; // [0..100]
-    XDAS_UInt8		detectValTo;   // [0..100]
-    XDAS_Bool     autoDetectHsv;// [true|false]
+//    XDAS_Bool     autoDetectHsv;// [true|false]
 } TRIK_VIDTRANSCODE_CV_InArgsAlg;
 
 typedef struct TRIK_VIDTRANSCODE_CV_InArgs {
@@ -63,15 +57,8 @@ typedef struct TRIK_VIDTRANSCODE_CV_InArgs {
 
 
 typedef struct TRIK_VIDTRANSCODE_CV_OutArgsAlg {
-    XDAS_Int8		targetX;    // [-100..100]
-    XDAS_Int8		targetY;    // [-100..100]
-    XDAS_UInt8		targetSize; // [0..100]
-    XDAS_UInt16		detectHue; // [0..256]
-    XDAS_UInt16		detectHueTolerance;   // [0..256]
-    XDAS_UInt16		detectSat; // [0..256]
-    XDAS_UInt16		detectSatTolerance;   // [0..256]
-    XDAS_UInt16		detectVal; // [0..256]
-    XDAS_UInt16		detectValTolerance;   // [0..256]
+    XDAS_UInt16		xs[10]; // [0..256]
+    XDAS_UInt16		ys[10];   // [0..256]
 } TRIK_VIDTRANSCODE_CV_OutArgsAlg;
 
 typedef struct TRIK_VIDTRANSCODE_CV_OutArgs {
