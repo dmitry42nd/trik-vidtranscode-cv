@@ -47,7 +47,7 @@ typedef struct TRIK_VIDTRANSCODE_CV_DynamicParams {
 
 
 typedef struct TRIK_VIDTRANSCODE_CV_InArgsAlg {
-//    XDAS_Bool     autoDetectHsv;// [true|false]
+    XDAS_Bool     autoDetectHsv;// [true|false]
 } TRIK_VIDTRANSCODE_CV_InArgsAlg;
 
 typedef struct TRIK_VIDTRANSCODE_CV_InArgs {
@@ -57,10 +57,8 @@ typedef struct TRIK_VIDTRANSCODE_CV_InArgs {
 
 
 typedef struct TRIK_VIDTRANSCODE_CV_OutArgsAlg {
-
     XDAS_UInt16		xs[10]; // [0..256]
     XDAS_UInt16		ys[10];   // [0..256]
-    
 } TRIK_VIDTRANSCODE_CV_OutArgsAlg;
 
 typedef struct TRIK_VIDTRANSCODE_CV_OutArgs {
