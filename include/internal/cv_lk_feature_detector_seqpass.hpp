@@ -56,7 +56,7 @@ class LKFeatureDetector<TRIK_VIDTRANSCODE_CV_VIDEO_FORMAT_YUV422P, TRIK_VIDTRANS
   private:
 
     uint16_t harrisCornersNum;
-   
+    
     int16_t width;
     int16_t height;
 
@@ -75,6 +75,7 @@ class LKFeatureDetector<TRIK_VIDTRANSCODE_CV_VIDEO_FORMAT_YUV422P, TRIK_VIDTRANS
     uint8_t *newpyr[3];
 
     int32_t nFeatures;
+    int32_t actualFeaturesNum;
 
     uint16_t *X;
     uint16_t *Y;
@@ -99,7 +100,23 @@ class LKFeatureDetector<TRIK_VIDTRANSCODE_CV_VIDEO_FORMAT_YUV422P, TRIK_VIDTRANS
     uint16_t *internalBuf;
     int32_t  *ind;
     int32_t   good_points_number;
-   
+
+
+
+    void drawLine(const int32_t x0, const int32_t y0, 
+                  const int32_t x1, const int32_t y1,
+                  const TrikCvImageBuffer& _outImage,
+                  const uint32_t _rgb888)
+    {
+      int dx = x1 - x0;
+      int dy = y1 - y0;
+      int xmin = x0 < x1 ? x0 : x1;
+      int xmax = x0 > x1 ? x0 : x1;
+      for (int x = xmin; x < xmax; x++) {
+        int y = y0 + dy * (x - x0) / dx;
+        drawDot(x, y, _outImage, _rgb888);
+      }
+    }   
     
     static void __attribute__((always_inline)) writeOutputPixel(uint16_t* restrict _rgb565ptr,
                                                                 const uint32_t _rgb888)
@@ -125,7 +142,20 @@ class LKFeatureDetector<TRIK_VIDTRANSCODE_CV_VIDEO_FORMAT_YUV422P, TRIK_VIDTRANS
       const uint32_t dstOfs = dstRow*m_outImageDesc.m_lineLength + dstCol*sizeof(uint16_t);
       writeOutputPixel(reinterpret_cast<uint16_t*>(_outImage.m_ptr+dstOfs), _rgb888);
     }
-    
+
+    void __attribute__((always_inline)) drawDot(const int32_t _srcCol, 
+                                                const int32_t _srcRow,
+                                                const TrikCvImageBuffer& _outImage,
+                                                const uint32_t _rgb888)
+    {
+      const int32_t widthBot  = 0;
+      const int32_t widthTop  = m_inImageDesc.m_width-1;
+      const int32_t heightBot = 0;
+      const int32_t heightTop = m_inImageDesc.m_height-1;
+
+      drawOutputPixelBound(_srcCol, _srcRow, widthBot, widthTop, heightBot, heightTop, _outImage, _rgb888);
+    }
+
     void __attribute__((always_inline)) drawCornerHighlight(const int32_t _srcCol, 
                                                             const int32_t _srcRow,
                                                             const TrikCvImageBuffer& _outImage,
@@ -146,7 +176,22 @@ class LKFeatureDetector<TRIK_VIDTRANSCODE_CV_VIDEO_FORMAT_YUV422P, TRIK_VIDTRANS
       drawOutputPixelBound(_srcCol+1, _srcRow, widthBot, widthTop, heightBot, heightTop, _outImage, _rgb888);
       drawOutputPixelBound(_srcCol+1, _srcRow+1, widthBot, widthTop, heightBot, heightTop, _outImage, _rgb888);
     }
-    
+ 
+ 
+ 
+     void YcbcrSeparation(const TrikCvImageBuffer& _inImage) {
+      //separate Cb Cr
+      uint8_t* restrict cb   = reinterpret_cast<uint8_t*>(s_cb);
+      uint8_t* restrict cr   = reinterpret_cast<uint8_t*>(s_cr);
+      const uint16_t* restrict CbCr = reinterpret_cast<const uint16_t*>(_inImage.m_ptr +
+                                                                        m_inImageDesc.m_lineLength*m_inImageDesc.m_height);
+      #pragma MUST_ITERATE(8, ,8)
+      for(int i = 0; i < width*height; i++) {
+          *(cb++) = static_cast<uint8_t>(*CbCr);
+          *(cr++) = static_cast<uint8_t>((*CbCr) >> 8);
+          CbCr++;
+      }
+    }   
     
     void DEBUG_INLINE detectHarrisCorners(const TrikCvImageBuffer& _inImage)
     {
@@ -171,35 +216,29 @@ class LKFeatureDetector<TRIK_VIDTRANSCODE_CV_VIDEO_FORMAT_YUV422P, TRIK_VIDTRANS
                            3000, 
                            buffer);
 
+/*
       memset(reinterpret_cast<uint8_t*>(s_corners), 0, width*height * sizeof(uint8_t));
       memset(outTemp, 0, width*height * sizeof(uint16_t));
-
+      VLIB_goodFeaturestoTrack(reinterpret_cast<const uint16_t*>(s_harrisScore), 
+                               reinterpret_cast<uint8_t*>(s_corners), 
+                               width, height,
+                               1, 7, 1,
+                               1, 1,
+                               outTemp, &good_points_number,
+                               pixIndex, internalBuf, ind);
+*/
 
       VLIB_nonMaxSuppress_7x7_S16(reinterpret_cast<const int16_t*>(s_harrisScore), 
                                   width, height, 8000, 
                                   reinterpret_cast<uint8_t*>(s_corners));
-      
-    }
-
+                                  
     
-    void YcbcrSeparation(const TrikCvImageBuffer& _inImage) {
-      //separate Cb Cr
-      uint8_t* restrict cb   = reinterpret_cast<uint8_t*>(s_cb);
-      uint8_t* restrict cr   = reinterpret_cast<uint8_t*>(s_cr);
-      const uint16_t* restrict CbCr = reinterpret_cast<const uint16_t*>(_inImage.m_ptr +
-                                                                        m_inImageDesc.m_lineLength*m_inImageDesc.m_height);
-      #pragma MUST_ITERATE(8, ,8)
-      for(int i = 0; i < width*height; i++) {
-          *(cb++) = static_cast<uint8_t>(*CbCr);
-          *(cr++) = static_cast<uint8_t>((*CbCr) >> 8);
-          CbCr++;
-      }
     }
 
     void setFeatures() {
       const uint32_t width  = m_inImageDesc.m_width;
       const uint32_t height = m_inImageDesc.m_height;
-      int i = 0;
+      actualFeaturesNum = 0;
       
       memset(X, 0,nFeatures*sizeof(uint16_t));
       memset(Y, 0,nFeatures*sizeof(uint16_t));
@@ -212,12 +251,12 @@ class LKFeatureDetector<TRIK_VIDTRANSCODE_CV_VIDEO_FORMAT_YUV422P, TRIK_VIDTRANS
         for(int c = 0; c < width; c++) {
           if(c > 10 && c < 310 && r > 5 && r < 235)
             if (*corners != 0) {
-              if (i < nFeatures) {
-                X[i] = c<<4;
-                Y[i] = r<<4;
-                i++;
+              if (actualFeaturesNum < nFeatures) {
+                X[actualFeaturesNum] = c<<4;
+                Y[actualFeaturesNum] = r<<4;
+                actualFeaturesNum++;
               }
-              harrisCornersNum++;
+              harrisCornersNum++; //dont used
             }
           corners++;
         }
@@ -225,20 +264,18 @@ class LKFeatureDetector<TRIK_VIDTRANSCODE_CV_VIDEO_FORMAT_YUV422P, TRIK_VIDTRANS
     }
 
     void doLKStuff(const TrikCvImageBuffer& _inImage, TrikCvImageBuffer& _outImage) {
-      int i;
-    
       // Obtain next frame, copy to block pointed by inputImage
       VLIB_imagePyramid8(reinterpret_cast<const uint8_t*>(_inImage.m_ptr), width, height, newpyrbuf);
 
       // Since we are starting from the level 3 in pyramid, the initial estimates of newX, newY are same as the
       // features of level 3 image of previousImage
-      for(i = 0; i < nFeatures; i++) {
+      for(int i = 0; i < nFeatures; i++) {
         newX[i] = X[i] >> 3;
         newY[i] = Y[i] >> 3;
       }
 
       // Update newX, newY three times starting from level 3 of pyramid up to level 1
-      for (i = 3; i > 0; i--) {
+      for (int i = 3; i > 0; i--) {
         // pyramidX, pyramidY will have feature co-ordinates of level i of previousImage
         for (int j = 0; j < nFeatures; j++) {
           pyramidX[j] = X[j] >> i;
@@ -278,10 +315,6 @@ class LKFeatureDetector<TRIK_VIDTRANSCODE_CV_VIDEO_FORMAT_YUV422P, TRIK_VIDTRANS
       // make inputImage, its pyramid and features 'old' for next iteration
       memcpy(previousImage, _inImage.m_ptr, width * height);
       memcpy(oldpyrbuf, newpyrbuf, width * height * 21 / 64);
-      for(i = 0; i < nFeatures; i++){
-        X[i] = newX[i];
-        Y[i] = newY[i];
-      }    
 
       //in_img to rgb565
       const short* restrict coeff = s_coeff;
@@ -305,17 +338,28 @@ class LKFeatureDetector<TRIK_VIDTRANSCODE_CV_VIDEO_FORMAT_YUV422P, TRIK_VIDTRANS
         for(int c = 0; c < width; c++) {
           const uint32_t dC    = *(p_wi2wo++);
           *(dIR+dC) = *(imgRgb565ptr++);
-            
+/*            
           if(c > 10 && c < 310 && r > 5 && r < 235)
             if (*corners != 0) {
               drawCornerHighlight(c, r, _outImage, 0xff0000);
             }
           corners++;
+*/
         }
       }
-        
-      for (i = 0; i < nFeatures; i++)
-        drawCornerHighlight(newX[i]>>4, newY[i]>>4, _outImage, 0x00ff00);
+
+      for(int i = 0; i < nFeatures; i++) {
+        if(outError[i] < 100) {
+          drawLine(X[i]>>4, Y[i]>>4, newX[i]>>4, newY[i]>>4, _outImage, 0xffffff);
+          drawCornerHighlight(newX[i]>>4, newY[i]>>4, _outImage, 0x00ff00);
+          X[i] = newX[i];
+          Y[i] = newY[i];
+        } else {
+          X[i] = -1;
+          Y[i] = -1;
+          actualFeaturesNum--;
+        }
+      }    
     
     }
 
@@ -391,8 +435,9 @@ class LKFeatureDetector<TRIK_VIDTRANSCODE_CV_VIDEO_FORMAT_YUV422P, TRIK_VIDTRANS
       newpyr[2] = newpyrbuf + width / 2 * height / 2;
       newpyr[3] = newpyrbuf + width / 2 * height / 2 + width / 4 * height / 4;
 
-      nFeatures = 200;
+      nFeatures = 100;
       harrisCornersNum = 0;
+      actualFeaturesNum = 0;
 
       X    = (uint16_t *) malloc(nFeatures * sizeof(uint16_t));
       Y    = (uint16_t *) malloc(nFeatures * sizeof(uint16_t));
@@ -438,7 +483,7 @@ class LKFeatureDetector<TRIK_VIDTRANSCODE_CV_VIDEO_FORMAT_YUV422P, TRIK_VIDTRANS
 #endif
         if (m_inImageDesc.m_height > 0 && m_inImageDesc.m_width > 0) {
           YcbcrSeparation(_inImage);
-          if (autoDetectHsv) {
+          if (autoDetectHsv || actualFeaturesNum < nFeatures/2) {
             detectHarrisCorners(_inImage);
             setFeatures();
           }
@@ -447,14 +492,14 @@ class LKFeatureDetector<TRIK_VIDTRANSCODE_CV_VIDEO_FORMAT_YUV422P, TRIK_VIDTRANS
 #ifdef DEBUG_REPEAT
       } // repeat
 #endif
+//      drawLine(100, 200, 10, 20, _outImage, 0xffffff);        
 
       for(int i = 0; i < 10; i++) {
         _outArgs.xs[i] = newX[i]>>4;
         _outArgs.ys[i] = newY[i]>>4;
       }
       
-      _outArgs.xs[0] = harrisCornersNum;
-      
+     
       return true;
     }
 };
