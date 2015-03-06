@@ -379,7 +379,7 @@ class LKFeatureDetector<TRIK_VIDTRANSCODE_CV_VIDEO_FORMAT_YUV422P, TRIK_VIDTRANS
 
       #define min(x,y) x < y ? x : y;
       const double srcToDstShift = min(static_cast<double>(m_outImageDesc.m_width)/m_inImageDesc.m_width, 
-                                 static_cast<double>(m_outImageDesc.m_height)/m_inImageDesc.m_height);
+                                       static_cast<double>(m_outImageDesc.m_height)/m_inImageDesc.m_height);
 
       const uint32_t widthIn  = _inImageDesc.m_width;
       uint32_t* restrict p_wi2wo = s_wi2wo;
@@ -453,16 +453,14 @@ class LKFeatureDetector<TRIK_VIDTRANSCODE_CV_VIDEO_FORMAT_YUV422P, TRIK_VIDTRANS
       pyramidX = (int16_t *) malloc(nFeatures * sizeof(int16_t));
       pyramidY = (int16_t *) malloc(nFeatures * sizeof(int16_t));
       scratch  = (uint8_t *) memalign(2, 893);      
-      
+
       //VLIB_imagePyramid8(previousImage, width, height, oldpyrbuf);
-      
-      
+
       outTemp     =  (uint16_t *) malloc(width*height * sizeof(uint16_t));
       pixIndex    =  (int16_t *)  malloc((width*height*2 + 2) * sizeof(int16_t));
       internalBuf =  (uint16_t *) malloc((width*height + 2*7) * sizeof(uint16_t));
       ind         =  (int32_t *)  malloc(width*height * sizeof(int32_t));
-      
-      
+
       return true;
     }
 
@@ -498,8 +496,7 @@ class LKFeatureDetector<TRIK_VIDTRANSCODE_CV_VIDEO_FORMAT_YUV422P, TRIK_VIDTRANS
         _outArgs.xs[i] = newX[i]>>4;
         _outArgs.ys[i] = newY[i]>>4;
       }
-      
-     
+
       return true;
     }
 };
