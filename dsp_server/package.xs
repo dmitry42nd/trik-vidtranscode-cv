@@ -2,6 +2,10 @@
  *  ======== package.xs ========
  */
 
+function getSects() {
+    return ("trik/vidtranscode_cv/dsp_server/link.cmd");
+}
+
 function validate() {
 
     // Each codec is validated with the following call:

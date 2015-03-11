@@ -24,8 +24,8 @@ for (var i = 0; i < Build.targets.length; i++) {
 
     Pkg.addExecutable("bin/" + serverName, targ, "ti.platforms.evmOMAPL138",
         {
-            cfgScript: "server.cfg",
-            lopts: "-l link.cmd",
+           //lopts: "-l link.cmd",
+	    cfgScript: "server.cfg",
         }).
         addObjects( [
             "main.c",

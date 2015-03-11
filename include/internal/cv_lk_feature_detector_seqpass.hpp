@@ -456,10 +456,10 @@ class LKFeatureDetector<TRIK_VIDTRANSCODE_CV_VIDEO_FORMAT_YUV422P, TRIK_VIDTRANS
 
       //VLIB_imagePyramid8(previousImage, width, height, oldpyrbuf);
 
-      outTemp     =  (uint16_t *) malloc(width*height * sizeof(uint16_t));
-      pixIndex    =  (int16_t *)  malloc((width*height*2 + 2) * sizeof(int16_t));
-      internalBuf =  (uint16_t *) malloc((width*height + 2*7) * sizeof(uint16_t));
-      ind         =  (int32_t *)  malloc(width*height * sizeof(int32_t));
+      outTemp     = (uint16_t *) malloc(width*height * sizeof(uint16_t));
+      pixIndex    = (int16_t *)  malloc((width*height*2 + 2) * sizeof(int16_t));
+      internalBuf = (uint16_t *) malloc((width*height + 2*7) * sizeof(uint16_t));
+      ind         = (int32_t *)  malloc(width*height * sizeof(int32_t));
 
       return true;
     }
