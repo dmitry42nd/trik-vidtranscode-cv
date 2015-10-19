@@ -13,6 +13,7 @@
 
 extern "C" {
 #include <include/IMG_ycbcr422pl_to_rgb565.h>
+#include <include/IMG_conv_5x5_i8_c8s.h>
 
 #include <ti/vlib/vlib.h>
 }
@@ -31,6 +32,13 @@ static uint32_t s_wi2wo[640];
 static uint32_t s_hi2ho[480];
 
 static const short s_coeff[5] = { 0x2000, 0x2BDD, -0x0AC5, -0x1658, 0x3770 };
+
+static const char conv_mask[25] = {0, 0, 1,  0, 0,
+                                  0, 1, 2,  1, 0,
+                                  1, 2, 16, 2, 1,
+                                  0, 1, 2,  1, 0,
+                                  0, 0, 1,  0, 0};
+static short conv_shift = 5;
 
 template <>
 class LKFeatureDetector<TRIK_VIDTRANSCODE_CV_VIDEO_FORMAT_YUV422P, TRIK_VIDTRANSCODE_CV_VIDEO_FORMAT_RGB565X> : public CVAlgorithm
@@ -62,8 +70,8 @@ class LKFeatureDetector<TRIK_VIDTRANSCODE_CV_VIDEO_FORMAT_YUV422P, TRIK_VIDTRANS
     uint8_t *m_oldPyrBuf;
     uint8_t *m_newPyrBuf;
 
-    uint8_t *m_oldPyr[3];
-    uint8_t *m_newPyr[3];
+    uint8_t *m_oldPyr[4];
+    uint8_t *m_newPyr[4];
 
     int32_t m_totalFeaturesNum;
     int32_t m_currentFeaturesNum;
@@ -79,12 +87,13 @@ class LKFeatureDetector<TRIK_VIDTRANSCODE_CV_VIDEO_FORMAT_YUV422P, TRIK_VIDTRANS
     
     uint8_t *m_scratch;
 
-
     uint16_t *outTemp;
     int16_t  *pixIndex;
     uint16_t *internalBuf;
     int32_t  *ind;
     int32_t   good_points_number;
+    
+    int16_t m_detectCnt;
 
 
     static void __attribute__((always_inline)) writeOutputPixel(uint16_t* restrict _rgb565ptr,
@@ -162,35 +171,51 @@ class LKFeatureDetector<TRIK_VIDTRANSCODE_CV_VIDEO_FORMAT_YUV422P, TRIK_VIDTRANS
     }
 
 
+
     void YcbcrSeparation(const TrikCvImageBuffer& _inImage) {
       const uint32_t width  = m_inImageDesc.m_width;
       const uint32_t height = m_inImageDesc.m_height;
       
-      const uint8_t* restrict CbCr = reinterpret_cast<const uint8_t*>(_inImage.m_ptr + 
-                                                                       m_inImageDesc.m_lineLength*height);
+      const uint8_t* restrict CbCr = reinterpret_cast<const uint8_t*>(_inImage.m_ptr + m_inImageDesc.m_lineLength*height);
       VLIB_convertUYVYsemipl_to_YUVpl(CbCr, width, width, height, m_cbIn, m_crIn);
+      
+//      m_yIn = reinterpret_cast<uint8_t *>(_inImage.m_ptr);
+    }
 
-      m_yIn = reinterpret_cast<uint8_t *>(_inImage.m_ptr);
-    }   
-    
+    void gaussianBlur(const TrikCvImageBuffer& _inImage) {
+
+      const uint32_t width  = m_inImageDesc.m_width;
+      const uint32_t height = m_inImageDesc.m_height;
+      
+      uint8_t *restrict inptr  = reinterpret_cast<uint8_t *>(_inImage.m_ptr);
+      uint8_t *restrict outptr = m_yIn;
+      
+      for(int i = 0; i < height; i++) {
+        IMG_conv_5x5_i8_c8s (inptr, outptr, width, width, conv_mask, conv_shift);
+        inptr  += width;
+        outptr += width;
+      }
+    }
     
     void detectFeaturesToTrack(const TrikCvImageBuffer& _inImage)
     {
       const uint32_t width          = m_inImageDesc.m_width;
       const uint32_t height         = m_inImageDesc.m_height;
-
-      //tracking Harris Corners
-      VLIB_xyGradients(reinterpret_cast<const uint8_t*>(_inImage.m_ptr), m_gX + width + 1, m_gY + width + 1, width, height);
+      memset(m_cornersMap, 0, width*height*sizeof(uint8_t));
+#if 1
+//tracking Harris Corners
+      VLIB_xyGradients(m_yIn, m_gX + width + 1, m_gY + width + 1, width, height);
       VLIB_harrisScore_7x7(m_gX, m_gY, width, height, m_cornersScore, 3000, m_buffer);
 /*
       VLIB_goodFeaturestoTrack(reinterpret_cast<const uint16_t *>(m_cornersScore),
                                m_cornersMap,
                                width, height,
-                               8000, 7, 80, m_totalFeaturesNum, 10,
+                               8000, 3, 140, m_totalFeaturesNum, 20,
                                outTemp,  &good_points_number,
                                pixIndex, internalBuf, ind);
 */
       VLIB_nonMaxSuppress_7x7_S16(m_cornersScore, width, height, 8000, m_cornersMap);
+#endif
     }
 
     void setFeaturesToTrack() {
@@ -222,7 +247,7 @@ class LKFeatureDetector<TRIK_VIDTRANSCODE_CV_VIDEO_FORMAT_YUV422P, TRIK_VIDTRANS
       const uint32_t height = m_inImageDesc.m_height;
       
 #if 1
-      VLIB_imagePyramid8(reinterpret_cast<const uint8_t*>(_inImage.m_ptr), width, height, m_newPyrBuf);
+      VLIB_imagePyramid8(m_yIn, width, height, m_newPyrBuf);
 
       for(int i = 0; i < m_totalFeaturesNum; i++) {
         m_newX[i] = m_X[i] >> 3;
@@ -252,7 +277,7 @@ class LKFeatureDetector<TRIK_VIDTRANSCODE_CV_VIDEO_FORMAT_YUV422P, TRIK_VIDTRANS
       }
 
       VLIB_xyGradients(m_oldPyr[0], m_gX + width + 1, m_gY + width + 1, width, height);
-      VLIB_trackFeaturesLucasKanade_7x7(m_oldPyr[0], reinterpret_cast<const uint8_t*>(_inImage.m_ptr), 
+      VLIB_trackFeaturesLucasKanade_7x7(m_oldPyr[0], m_yIn, 
                                         m_gX, m_gY, 
                                         width, height,
                                         m_totalFeaturesNum,
@@ -260,7 +285,7 @@ class LKFeatureDetector<TRIK_VIDTRANSCODE_CV_VIDEO_FORMAT_YUV422P, TRIK_VIDTRANS
                                         m_newX, m_newY,
                                         m_outError, 10, 0, m_scratch);
 
-      memcpy(m_oldPyr[0], _inImage.m_ptr, width * height);
+      memcpy(m_oldPyr[0], m_yIn, width * height);
       memcpy(m_oldPyrBuf, m_newPyrBuf, width * height * 21 / 64);
 #endif
 
@@ -298,7 +323,8 @@ class LKFeatureDetector<TRIK_VIDTRANSCODE_CV_VIDEO_FORMAT_YUV422P, TRIK_VIDTRANS
       IMG_ycbcr422pl_to_rgb565(coeff, reinterpret_cast<const unsigned char*>(y_out), 
                                       reinterpret_cast<const unsigned char*>(cb_out), 
                                       reinterpret_cast<const unsigned char*>(cr_out), rgb565_out, width*height);
-/*
+#if 0
+//write out corners
       const uint8_t* restrict corners  = reinterpret_cast<uint8_t*>(m_cornersMap);
       for(int r = 0; r < height; r++) {
         for(int c = 0; c < width; c++) {
@@ -309,20 +335,19 @@ class LKFeatureDetector<TRIK_VIDTRANSCODE_CV_VIDEO_FORMAT_YUV422P, TRIK_VIDTRANS
           corners++;
         }
       }
-*/
+#endif
+
       for(int i = 0; i < m_totalFeaturesNum; i++) {
-//        if(m_outError[i] < 40) {
+        if(m_outError[i] < 500) {
           drawLine(m_X[i] >> 4, m_Y[i] >> 4, m_newX[i] >> 4, m_newY[i] >> 4, _outImage, 0xffffff);
           drawCornerHighlight(m_newX[i] >> 4, m_newY[i] >> 4, _outImage, 0x00ff00);
           m_X[i] = m_newX[i];
           m_Y[i] = m_newY[i];
-          /*
         } else {
           m_X[i] = -1;
           m_Y[i] = -1;
           m_currentFeaturesNum--;
         }
-        */
       }    
 
     }
@@ -349,7 +374,11 @@ class LKFeatureDetector<TRIK_VIDTRANSCODE_CV_VIDEO_FORMAT_YUV422P, TRIK_VIDTRANS
                           static_cast<double>(m_outImageDesc.m_height)/height);
 
 //malloc zone
-//      m_yIn  = (uint8_t *)memalign(64, m_inImageDesc.m_width*m_inImageDesc.m_height*sizeof(uint8_t));
+      uint16_t    totalHalfWordsInRow    = ((m_inImageDesc.m_width  - 2 * 3) & 0xFFF0U) >> 0x4U;
+      uint32_t    totalFeatureHalfWords  = totalHalfWordsInRow * (m_inImageDesc.m_height - 2 * 3);
+
+
+      m_yIn  = (uint8_t *)memalign(32, m_inImageDesc.m_width*m_inImageDesc.m_height*sizeof(uint8_t));
       m_cbIn = (uint8_t *)memalign(32, m_inImageDesc.m_width*m_inImageDesc.m_height*sizeof(uint8_t));
       m_crIn = (uint8_t *)memalign(32, m_inImageDesc.m_width*m_inImageDesc.m_height*sizeof(uint8_t));
 
@@ -372,7 +401,7 @@ class LKFeatureDetector<TRIK_VIDTRANSCODE_CV_VIDEO_FORMAT_YUV422P, TRIK_VIDTRANS
       m_oldPyr[2] = m_oldPyrBuf + width / 2 * height / 2;
       m_oldPyr[3] = m_oldPyrBuf + width / 2 * height / 2 + width / 4 * height / 4;
 
-//      m_newPyr[0] = inputImage;
+//      m_newPyr[0] = inputImage.m_ptr;
       m_newPyr[1] = m_newPyrBuf;
       m_newPyr[2] = m_newPyrBuf + width / 2 * height / 2;
       m_newPyr[3] = m_newPyrBuf + width / 2 * height / 2 + width / 4 * height / 4;
@@ -395,11 +424,12 @@ class LKFeatureDetector<TRIK_VIDTRANSCODE_CV_VIDEO_FORMAT_YUV422P, TRIK_VIDTRANS
       m_pyramidY = (uint16_t *) malloc(m_totalFeaturesNum * sizeof(uint16_t));
       m_scratch  = (uint8_t *) memalign(2, 893);      
 
-
       outTemp     = (uint16_t *) malloc(width*height * sizeof(uint16_t));
       pixIndex    = (int16_t *)  malloc((width*height*2 + 2) * sizeof(int16_t));
       internalBuf = (uint16_t *) malloc((width*height + 2*7) * sizeof(uint16_t));
       ind         = (int32_t *)  malloc(width*height * sizeof(int32_t));
+
+      m_detectCnt = 0;
 
       return true;
     }
@@ -422,11 +452,14 @@ class LKFeatureDetector<TRIK_VIDTRANSCODE_CV_VIDEO_FORMAT_YUV422P, TRIK_VIDTRANS
         if (m_inImageDesc.m_height > 0 && m_inImageDesc.m_width > 0) {
           //preprocessImage();
           YcbcrSeparation(_inImage);
+          gaussianBlur(_inImage);
 
-          if (autoDetectHsv/* || m_currentFeaturesNum < m_totalFeaturesNum/2*/) {
+          if (autoDetectHsv || m_detectCnt == 10) {
             detectFeaturesToTrack(_inImage);
             setFeaturesToTrack();
+            m_detectCnt = 0;
           }
+          m_detectCnt++;
 
           doLKStuff(_inImage, _outImage);
           
@@ -440,7 +473,7 @@ class LKFeatureDetector<TRIK_VIDTRANSCODE_CV_VIDEO_FORMAT_YUV422P, TRIK_VIDTRANS
         _outArgs.xs[i] = m_newX[i]>>4;
         _outArgs.ys[i] = m_newY[i]>>4;
       }
-      _outArgs.xs[0] = good_points_number;
+
       return true;
     }
 };
